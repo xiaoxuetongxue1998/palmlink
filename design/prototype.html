@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>掌驭 PalmLink · 界面原型 v0.1</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #0B0E12;
+    --surface: #151B22;
+    --surface2: #1B232C;
+    --line: #26313C;
+    --line-soft: #1F2831;
+    --primary: #2ED3C6;
+    --primary-dim: #0E2E2A;
+    --primary-glow: rgba(46, 211, 198, .18);
+    --text: #E8F0F7;
+    --muted: #8B9DAD;
+    --dim: #5A6A7A;
+    --warn: #F0A05A;
+    --danger: #E87373;
+  }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(1200px 600px at 50% -10%, #16202b 0%, #090c10 60%, #06080b 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "HarmonyOS Sans SC", sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+  .stage { display: flex; height: 100%; align-items: center; justify-content: center; gap: 56px; padding: 24px; }
+
+  /* ---------- 左侧导航 ---------- */
+  .nav {
+    width: 236px; flex: 0 0 236px; align-self: stretch;
+    padding: 28px 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto;
+  }
+  .nav h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: .5px; font-weight: 650; }
+  .nav .sub { font-size: 11px; color: var(--dim); margin-bottom: 18px; line-height: 1.6; }
+  .nav .group { font-size: 10px; color: var(--dim); letter-spacing: 1.4px; margin: 14px 0 6px; text-transform: uppercase; }
+  .nav button {
+    all: unset; cursor: pointer; padding: 9px 12px; border-radius: 9px;
+    font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 9px;
+    border: 1px solid transparent; transition: .16s;
+  }
+  .nav button:hover { background: #131a21; color: var(--text); }
+  .nav button.on { background: #16211f; color: var(--primary); border-color: #24443f; }
+  .nav button .n { font-size: 10px; color: var(--dim); width: 14px; font-variant-numeric: tabular-nums; }
+  .nav button.on .n { color: #1d6f66; }
+  .nav .tip {
+    margin-top: auto; font-size: 10.5px; line-height: 1.75; color: var(--dim);
+    border-top: 1px solid var(--line-soft); padding-top: 14px;
+  }
+  .nav .tip b { color: var(--muted); font-weight: 600; }
+
+  /* ---------- 手机外框 ---------- */
+  .device-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .phone {
+    width: 396px; height: 852px; border-radius: 52px; padding: 11px;
+    background: linear-gradient(160deg, #2a323c 0%, #12171d 40%, #0a0d11 100%);
+    box-shadow: 0 40px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05),
+                inset 0 0 0 1px rgba(255,255,255,.04);
+    position: relative;
+  }
+  .screen {
+    width: 100%; height: 100%; border-radius: 42px; overflow: hidden;
+    background: var(--bg); position: relative; display: flex; flex-direction: column;
+  }
+  .island {
+    position: absolute; top: 13px; left: 50%; transform: translateX(-50%);
+    width: 108px; height: 29px; border-radius: 16px; background: #05070a; z-index: 60;
+  }
+  .statusbar {
+    height: 46px; flex: 0 0 46px; display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 24px 6px; font-size: 12px; font-weight: 600; color: var(--text); z-index: 50;
+  }
+  .statusbar .icons { display: flex; align-items: center; gap: 5px; }
+
+  /* ---------- 视图 ---------- */
+  .view { display: none; flex: 1; flex-direction: column; min-height: 0; position: relative; }
+  .view.active { display: flex; }
+  .body { flex: 1; overflow-y: auto; padding: 0 20px 20px; min-height: 0; }
+  .body::-webkit-scrollbar { width: 0; }
+
+  /* 通用顶栏 */
+  .topbar {
+    display: flex; align-items: center; gap: 12px; padding: 4px 20px 14px;
+    flex: 0 0 auto;
+  }
+  .topbar h2 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  .topbar .spacer { flex: 1; }
+  .iconbtn {
+    width: 36px; height: 36px; border-radius: 12px; background: var(--surface);
+    border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--muted); transition: .16s;
+  }
+  .iconbtn:hover { color: var(--primary); border-color: #2c5a54; }
+  .iconbtn:active { transform: scale(.94); }
+
+  svg { display: block; }
+
+  /* ---------- 1. 角色选择 ---------- */
+  .role-hero { padding: 26px 24px 8px; text-align: center; }
+  .logo {
+    width: 66px; height: 66px; border-radius: 20px; margin: 0 auto 18px;
+    background: linear-gradient(155deg, #2ED3C6 0%, #17968d 55%, #0d5a55 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 12px 34px rgba(46,211,198,.28), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .role-hero h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: 2px; font-weight: 600; }
+  .role-hero .en { font-size: 11px; letter-spacing: 4px; color: var(--dim); text-transform: uppercase; }
+  .role-hero p { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; line-height: 1.7; }
+
+  .role-card {
+    margin: 0 20px 12px; padding: 20px 18px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--line);
+    display: flex; align-items: center; gap: 15px; cursor: pointer; transition: .18s;
+  }
+  .role-card:hover { border-color: #34645e; background: #17211f; transform: translateY(-1px); }
+  .role-card:active { transform: scale(.985); }
+  .role-card .ri {
+    width: 48px; height: 48px; border-radius: 15px; flex: 0 0 48px;
+    background: #0f1b19; border: 1px solid #234540;
+    display: flex; align-items: center; justify-content: center; color: var(--primary);
+  }
+  .role-card h3 { font-size: 15px; margin: 0 0 4px; font-weight: 620; }
+  .role-card p { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.55; }
+  .role-card .arrow { margin-left: auto; color: var(--dim); }
+  .role-foot { padding: 6px 26px 24px; font-size: 10.5px; color: var(--dim); line-height: 1.8; text-align: center; }
+
+  /* ---------- 2. 设备列表 ---------- */
+  .dev-card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    padding: 15px 16px; margin-bottom: 11px; display: flex; align-items: center; gap: 14px;
+    cursor: pointer; transition: .18s;
+  }
+  .dev-card:hover { border-color: #34645e; background: #17211f; }
+  .dev-ico {
+    width: 44px; height: 44px; border-radius: 14px; flex: 0 0 44px;
+    background: #121a20; border: 1px solid var(--line); display: flex;
+    align-items: center; justify-content: center; color: var(--muted); position: relative;
+  }
+  .dev-card.online .dev-ico { color: var(--primary); border-color: #234540; background: #0f1b19; }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--dim);
+    position: absolute; right: -2px; bottom: -2px; border: 2px solid var(--surface);
+  }
+  .dev-card.online .dot { background: var(--primary); box-shadow: 0 0 8px rgba(46,211,198,.8); }
+  .dev-meta { flex: 1; min-width: 0; }
+  .dev-meta h3 { font-size: 14px; margin: 0 0 5px; font-weight: 600; }
+  .dev-meta p { font-size: 11px; color: var(--dim); margin: 0; display: flex; align-items: center; gap: 6px; }
+  .chip {
+    font-size: 10px; padding: 2.5px 7px; border-radius: 6px; background: #1a232b;
+    color: var(--muted); border: 1px solid var(--line-soft);
+  }
+  .chip.live { background: var(--primary-dim); color: var(--primary); border-color: #234540; }
+
+  .add-btn {
+    width: 100%; padding: 15px; border-radius: 16px; border: 1px dashed #2b3945;
+    background: transparent; color: var(--muted); font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 4px; transition: .18s; font-family: inherit;
+  }
+  .add-btn:hover { border-color: var(--primary); color: var(--primary); background: #0f1a19; }
+
+  .section-label {
+    font-size: 10.5px; color: var(--dim); letter-spacing: 1.2px;
+    margin: 18px 0 10px; text-transform: uppercase;
+  }
+
+  /* ---------- 3. 扫码 ---------- */
+  .scan-wrap {
+    flex: 1; position: relative; display: flex; flex-direction: column;
+    background: radial-gradient(360px 360px at 50% 42%, #1c2a2e 0%, #0a1013 55%, #06090c 100%);
+    margin: 0 0 0; overflow: hidden;
+  }
+  .scan-grid {
+    position: absolute; inset: 0; opacity: .5;
+    background-image: linear-gradient(rgba(46,211,198,.055) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(46,211,198,.055) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+  .finder { position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%); width: 218px; height: 218px; }
+  .finder .c { position: absolute; width: 30px; height: 30px; border: 3px solid var(--primary); border-radius: 3px; }
+  .finder .c1 { top: 0; left: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 12px; }
+  .finder .c2 { top: 0; right: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 12px; }
+  .finder .c3 { bottom: 0; left: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 12px; }
+  .finder .c4 { bottom: 0; right: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 12px; }
+  .scanline {
+    position: absolute; left: 8px; right: 8px; height: 2px; top: 0;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    box-shadow: 0 0 18px 3px rgba(46,211,198,.55);
+    animation: scanmove 2.4s ease-in-out infinite;
+  }
+  @keyframes scanmove { 0%,100% { top: 6%; opacity: .25; } 50% { top: 92%; opacity: 1; } }
+  .scan-hint {
+    position: absolute; left: 0; right: 0; top: calc(42% + 140px); text-align: center;
+    font-size: 12.5px; color: var(--muted); line-height: 1.8;
+  }
+  .scan-actions {
+    margin-top: auto; padding: 0 24px 30px; display: flex; gap: 12px; z-index: 5;
+  }
+  .ghost-btn {
+    flex: 1; padding: 14px; border-radius: 14px; background: rgba(21,27,34,.85);
+    border: 1px solid var(--line); color: var(--text); font-size: 12.5px;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    cursor: pointer; font-family: inherit; backdrop-filter: blur(8px); transition: .16s;
+  }
+  .ghost-btn:hover { border-color: #34645e; color: var(--primary); }
+
+  /* ---------- 4. 连接中 ---------- */
+  .connecting { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 0 30px 40px; }
+  .radar { width: 128px; height: 128px; margin: 0 auto 30px; position: relative; }
+  .radar .ring {
+    position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(46,211,198,.35);
+    animation: ripple 2.6s ease-out infinite;
+  }
+  .radar .ring:nth-child(2) { animation-delay: .85s; }
+  .radar .ring:nth-child(3) { animation-delay: 1.7s; }
+  @keyframes ripple { 0% { transform: scale(.35); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+  .radar .core {
+    position: absolute; inset: 34px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #2ED3C6, #12817a);
+    box-shadow: 0 0 40px rgba(46,211,198,.4);
+    display: flex; align-items: center; justify-content: center; color: #04201d;
+  }
+  .conn-title { text-align: center; font-size: 17px; font-weight: 620; margin-bottom: 8px; }
+  .conn-sub { text-align: center; font-size: 12px; color: var(--muted); margin-bottom: 30px; }
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+  .step { display: flex; align-items: center; gap: 13px; padding: 13px 4px; position: relative; }
+  .step:not(:last-child)::after {
+    content: ""; position: absolute; left: 15px; top: 38px; bottom: -6px; width: 1px;
+    background: var(--line);
+  }
+  .step .si {
+    width: 31px; height: 31px; border-radius: 50%; flex: 0 0 31px; display: flex;
+    align-items: center; justify-content: center; background: var(--surface);
+    border: 1px solid var(--line); color: var(--dim); font-size: 11px; font-weight: 600;
+  }
+  .step.done .si { background: var(--primary-dim); border-color: #2a5f58; color: var(--primary); }
+  .step.now .si { background: transparent; border-color: var(--primary); color: var(--primary); }
+  .step .st { font-size: 13px; color: var(--dim); }
+  .step.done .st { color: var(--muted); }
+  .step.now .st { color: var(--text); font-weight: 560; }
+  .step .sd { font-size: 10.5px; color: var(--dim); margin-top: 3px; }
+  .spin {
+    width: 15px; height: 15px; border-radius: 50%; border: 2px solid rgba(46,211,198,.25);
+    border-top-color: var(--primary); animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- 5. 远程控制 ---------- */
+  .remote { flex: 1; display: flex; flex-direction: column; background: #000; min-height: 0; position: relative; }
+  .remote-top {
+    position: absolute; top: 0; left: 0; right: 0; height: 52px; z-index: 40;
+    display: flex; align-items: center; gap: 9px; padding: 0 14px;
+    background: linear-gradient(180deg, rgba(0,0,0,.82), rgba(0,0,0,0));
+    font-size: 11.5px; color: var(--text);
+  }
+  .remote-top .name { font-size: 12px; font-weight: 560; }
+  .remote-top .stat {
+    display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: rgba(232,240,247,.72);
+    font-variant-numeric: tabular-nums;
+  }
+  .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: blink 1.8s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+  .mirror {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #050709;
+  }
+  .mirror-inner {
+    width: 100%; height: 100%; position: relative; overflow: hidden;
+    background: #0e1114; display: flex; flex-direction: column;
+  }
+  /* 模拟对方手机的界面 */
+  .m-status {
+    height: 34px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; font-size: 11px; color: #cfd8e0; flex: 0 0 34px;
+  }
+  .m-head {
+    padding: 4px 16px 10px; display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  }
+  .m-head h4 { margin: 0; font-size: 16px; color: #eef4f8; font-weight: 600; }
+  .m-head .badge { background: #1f2a33; color: #9fb0bf; font-size: 10px; padding: 1px 6px; border-radius: 5px; }
+  .chat-list { flex: 1; overflow: hidden; padding: 0 8px; }
+  .chat {
+    display: flex; gap: 11px; padding: 11px 8px; align-items: center;
+    border-bottom: 1px solid #181d22;
+  }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 11px; flex: 0 0 40px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: #08120f;
+  }
+  .chat .txt { flex: 1; min-width: 0; }
+  .chat .txt .t { font-size: 13px; color: #e6edf3; margin-bottom: 4px; }
+  .chat .txt .m { font-size: 11.5px; color: #76838f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat .time { font-size: 10px; color: #5c6771; align-self: flex-start; padding-top: 3px; }
+  .m-tabbar {
+    height: 54px; flex: 0 0 54px; display: flex; border-top: 1px solid #181d22;
+    background: #0b0e11; align-items: center;
+  }
+  .m-tabbar div { flex: 1; text-align: center; font-size: 9.5px; color: #4d5862; }
+  .m-tabbar div.on { color: #4ecb8f; }
+
+  .touch-dot {
+    position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px;
+    border-radius: 50%; border: 2px solid rgba(46,211,198,.9);
+    background: rgba(46,211,198,.22); pointer-events: none;
+    animation: tap 620ms cubic-bezier(.2,.8,.3,1) forwards;
+  }
+  @keyframes tap {
+    0% { transform: scale(.35); opacity: 1; }
+    100% { transform: scale(1.75); opacity: 0; }
+  }
+
+  .tools {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 3px; padding: 7px;
+    border-radius: 20px; background: rgba(14,18,22,.9);
+    border: 1px solid rgba(255,255,255,.09); backdrop-filter: blur(14px); z-index: 40;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  .tool {
+    width: 42px; height: 42px; border-radius: 14px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px; cursor: pointer;
+    color: #b9c6d2; transition: .14s; position: relative;
+  }
+  .tool span { font-size: 8.5px; letter-spacing: .2px; }
+  .tool:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .tool:active { transform: scale(.93); }
+  .tool.danger { color: #E87373; }
+  .tool.danger:hover { background: rgba(232,115,115,.14); }
+  .tools .sep { width: 1px; height: 24px; background: rgba(255,255,255,.1); margin: 0 3px; }
+
+  /* ---------- 6. 授权向导 ---------- */
+  .guide-head { padding: 8px 20px 20px; }
+  .guide-head h2 { font-size: 21px; margin: 0 0 7px; font-weight: 620; line-height: 1.35; }
+  .guide-head p { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.7; }
+  .gstep {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 17px;
+    padding: 16px; margin-bottom: 11px; display: flex; gap: 13px; align-items: flex-start;
+  }
+  .gstep.ok { border-color: #24443f; background: #101c1a; }
+  .gstep .gi {
+    width: 28px; height: 28px; border-radius: 9px; flex: 0 0 28px;
+    background: #1b242d; border: 1px solid var(--line); color: var(--dim);
+    display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700;
+  }
+  .gstep.ok .gi { background: var(--primary-dim); border-color: #2a5f58; color: var(--primary); }
+  .gstep .gc { flex: 1; min-width: 0; }
+  .gstep h4 { font-size: 13.5px; margin: 3px 0 5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .gstep p { font-size: 11px; color: var(--dim); margin: 0; line-height: 1.65; }
+  .tag { font-size: 9px; padding: 1.5px 5px; border-radius: 4px; background: #2a1f14; color: var(--warn); border: 1px solid #3d2d1c; }
+  .tag.gray { background: #1a222a; color: var(--dim); border-color: var(--line-soft); }
+  .gstep .go {
+    align-self: center; font-size: 11.5px; color: var(--primary); border: 1px solid #2c5a54;
+    padding: 7px 12px; border-radius: 10px; background: #0f1a19; cursor: pointer;
+    white-space: nowrap; font-family: inherit; transition: .15s; flex: 0 0 auto;
+  }
+  .gstep .go:hover { background: #132723; }
+  .gstep .go.done { color: var(--dim); border-color: var(--line); background: transparent; }
+
+  .primary-btn {
+    width: 100%; padding: 16px; border-radius: 16px; border: none; cursor: pointer;
+    background: linear-gradient(150deg, #2ED3C6, #17a89e); color: #04201d;
+    font-size: 14px; font-weight: 650; font-family: inherit;
+    box-shadow: 0 10px 26px rgba(46,211,198,.24); transition: .16s;
+  }
+  .primary-btn:hover { filter: brightness(1.06); }
+  .primary-btn:active { transform: scale(.98); }
+  .primary-btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); box-shadow: none; font-weight: 500; }
+  .primary-btn.danger { background: linear-gradient(150deg, #e87373, #c24545); color: #fff; box-shadow: 0 10px 26px rgba(232,115,115,.2); }
+
+  /* ---------- 7. 被控端就绪 ---------- */
+  .host-pill {
+    margin: 0 20px 18px; padding: 11px 15px; border-radius: 14px;
+    background: var(--primary-dim); border: 1px solid #234540;
+    display: flex; align-items: center; gap: 9px; font-size: 11.5px; color: var(--primary);
+  }
+  .qr-wrap {
+    margin: 0 20px; padding: 20px; background: #F2F6F7; border-radius: 22px;
+    display: flex; flex-direction: column; align-items: center;
+    box-shadow: 0 16px 44px rgba(0,0,0,.45);
+  }
+  .qr {
+    width: 196px; height: 196px; display: grid;
+    grid-template-columns: repeat(25, 1fr); grid-template-rows: repeat(25, 1fr);
+    gap: 0; background: #fff; padding: 0;
+  }
+  .qr i { display: block; background: transparent; }
+  .qr i.b { background: #0B0E12; }
+  .qr-wrap .cap { font-size: 10.5px; color: #5c6a72; margin-top: 13px; text-align: center; line-height: 1.6; }
+  .host-info {
+    margin: 16px 20px 0; display: flex; gap: 10px;
+  }
+  .info-box {
+    flex: 1; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 13px; padding: 11px 13px;
+  }
+  .info-box .k { font-size: 9.5px; color: var(--dim); margin-bottom: 5px; letter-spacing: .4px; }
+  .info-box .v { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  /* ---------- 8. 授权请求弹窗 ---------- */
+  .overlay {
+    position: absolute; inset: 0; z-index: 80; display: none;
+    align-items: center; justify-content: center; padding: 24px;
+    background: rgba(4,6,9,.72); backdrop-filter: blur(6px);
+  }
+  .overlay.show { display: flex; animation: fade .22s ease; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .dialog {
+    width: 100%; background: #171F27; border: 1px solid #2e3b47; border-radius: 24px;
+    padding: 26px 22px 20px; text-align: center;
+    box-shadow: 0 24px 70px rgba(0,0,0,.7); animation: pop .26s cubic-bezier(.2,.9,.3,1.2);
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .dialog .who {
+    width: 60px; height: 60px; border-radius: 20px; margin: 0 auto 15px;
+    background: linear-gradient(150deg, #2b3a48, #17212b); border: 1px solid #35434f;
+    display: flex; align-items: center; justify-content: center; color: #9fb0bf;
+  }
+  .dialog h3 { font-size: 16px; margin: 0 0 9px; font-weight: 620; line-height: 1.45; }
+  .dialog h3 b { color: var(--primary); }
+  .dialog p { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; line-height: 1.7; }
+  .countdown {
+    width: 100%; height: 3px; background: #232d36; border-radius: 2px;
+    margin: 16px 0 20px; overflow: hidden;
+  }
+  .countdown i { display: block; height: 100%; width: 100%; background: var(--warn); border-radius: 2px; animation: shrink 60s linear forwards; }
+  @keyframes shrink { to { width: 0%; } }
+  .dialog-actions { display: flex; gap: 10px; }
+  .dialog-actions button {
+    flex: 1; padding: 14px; border-radius: 14px; font-size: 13.5px; cursor: pointer;
+    font-family: inherit; font-weight: 550; border: 1px solid var(--line);
+    background: transparent; color: var(--muted); transition: .15s;
+  }
+  .dialog-actions button.ok { background: linear-gradient(150deg, #2ED3C6, #17a89e); color: #04201d; border: none; font-weight: 650; }
+  .dialog-actions button:hover { filter: brightness(1.08); }
+
+  /* ---------- 9. 控制中 ---------- */
+  .active-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 28px; }
+  .live-ring {
+    width: 150px; height: 150px; border-radius: 50%; position: relative; margin-bottom: 28px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .live-ring::before {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid rgba(232,115,115,.4); animation: ripple 2.4s ease-out infinite;
+  }
+  .live-ring::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%;
+    border: 1px solid rgba(232,115,115,.3); animation: ripple 2.4s ease-out infinite 1.2s;
+  }
+  .live-core {
+    width: 96px; height: 96px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #f08a8a, #b83a3a);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 44px rgba(232,115,115,.35);
+  }
+  .active-title { font-size: 17px; font-weight: 620; margin-bottom: 8px; }
+  .active-title b { color: var(--danger); }
+  .active-sub { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.7; margin-bottom: 24px; }
+  .timer {
+    font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: 2px;
+    color: var(--text); margin-bottom: 28px; font-weight: 300;
+  }
+  .warn-box {
+    width: 100%; background: #1e1712; border: 1px solid #3d2d1c; border-radius: 14px;
+    padding: 13px 15px; font-size: 11px; color: #d9a273; line-height: 1.65;
+    display: flex; gap: 9px; margin-bottom: 22px;
+  }
+
+  /* ---------- 10. 设置 ---------- */
+  .set-group { margin-bottom: 22px; }
+  .set-row {
+    display: flex; align-items: center; gap: 12px; padding: 15px 16px;
+    background: var(--surface); border: 1px solid var(--line); border-bottom: none;
+    font-size: 13px;
+  }
+  .set-row:first-of-type { border-radius: 16px 16px 0 0; }
+  .set-row:last-of-type { border-radius: 0 0 16px 16px; border-bottom: 1px solid var(--line); }
+  .set-row:only-of-type { border-radius: 16px; border-bottom: 1px solid var(--line); }
+  .set-row .k { flex: 1; color: var(--text); }
+  .set-row .v { color: var(--dim); font-size: 11.5px; }
+  .seg {
+    display: flex; background: #0e141a; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px;
+  }
+  .seg div {
+    padding: 5px 11px; border-radius: 7px; font-size: 11px; color: var(--dim); cursor: pointer; transition: .15s;
+  }
+  .seg div.on { background: var(--primary-dim); color: var(--primary); }
+  .switch {
+    width: 40px; height: 23px; border-radius: 12px; background: #232d36; position: relative;
+    cursor: pointer; transition: .18s; flex: 0 0 40px;
+  }
+  .switch::after {
+    content: ""; position: absolute; width: 17px; height: 17px; border-radius: 50%;
+    background: #8b9dad; top: 3px; left: 3px; transition: .18s;
+  }
+  .switch.on { background: var(--primary-dim); }
+  .switch.on::after { left: 20px; background: var(--primary); }
+
+  /* ---------- 轻提示 ---------- */
+  .toast {
+    position: absolute; left: 50%; bottom: 84px; transform: translate(-50%, 8px);
+    background: rgba(28,36,45,.96); border: 1px solid #33414f; color: #dbe5ec;
+    font-size: 11.5px; padding: 9px 16px; border-radius: 11px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: .22s; z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (max-width: 900px) {
+    .nav { display: none; }
+    .stage { padding: 0; gap: 0; }
+    .phone { width: 100vw; height: 100vh; border-radius: 0; padding: 0; box-shadow: none; }
+    .screen { border-radius: 0; }
+    .island { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <aside class="nav">
+    <h1>掌驭 PalmLink</h1>
+    <div class="sub">界面原型 v0.1<br>深色科技风 · 10 屏</div>
+
+    <div class="group">控制端 · Controller</div>
+    <button data-go="role" class="on"><span class="n">01</span>角色选择</button>
+    <button data-go="devices"><span class="n">02</span>设备首页</button>
+    <button data-go="scan"><span class="n">03</span>扫码配对</button>
+    <button data-go="connecting"><span class="n">04</span>连接中</button>
+    <button data-go="remote"><span class="n">05</span>远程控制</button>
+
+    <div class="group">被控端 · Host</div>
+    <button data-go="guide"><span class="n">06</span>授权向导</button>
+    <button data-go="host"><span class="n">07</span>等待连接</button>
+    <button data-go="request"><span class="n">08</span>控制请求</button>
+    <button data-go="active"><span class="n">09</span>正在被控</button>
+
+    <div class="group">通用</div>
+    <button data-go="settings"><span class="n">10</span>设置</button>
+
+    <div class="tip">
+      <b>建议路径</b><br>
+      角色选择 → 控制别人 → 设备 → 扫码 → 连接中 → 远程控制<br><br>
+      被控端：角色选择 → 被控制 → 授权向导 → 等待连接 → 请求 → 正在被控
+    </div>
+  </aside>
+
+  <div class="device-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="island"></div>
+
+        <!-- ============ 01 角色选择 ============ -->
+        <div class="view active" id="v-role">
+          <div class="statusbar">
+            <span>21:28</span>
+            <span class="icons">
+              <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <svg width="14" height="11" viewBox="0 0 14 11" fill="none"><path d="M1 4.2C2.6 2.6 4.7 1.7 7 1.7s4.4.9 6 2.5M3.4 6.7C4.4 5.7 5.6 5.2 7 5.2s2.6.5 3.6 1.5M7 9.3v.1" stroke="#E8F0F7" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/><path d="M20 4v3" stroke="#E8F0F7" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+
+          <div class="topbar" style="padding-top:2px;padding-bottom:2px">
+            <div class="iconbtn" data-act="exit" style="background:transparent;border:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+
+          <div class="role-hero">
+            <div class="logo">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                <rect x="6" y="2.5" width="9" height="16" rx="2.2" stroke="#04201d" stroke-width="1.7"/>
+                <path d="M9.5 17.2h6a2 2 0 0 0 2-2V7.5" stroke="#04201d" stroke-width="1.7" stroke-linecap="round"/>
+                <circle cx="10.5" cy="6.5" r="1.3" fill="#04201d"/>
+              </svg>
+            </div>
+            <h2>掌驭</h2>
+            <div class="en">PalmLink</div>
+            <p>把手机借给信任的人<br>隔着屏幕，也能亲手操作</p>
+          </div>
+
+          <div style="height:26px"></div>
+
+          <div class="role-card" data-go="devices">
+            <div class="ri">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                <path d="M5 3.5l6.5 16 2.2-6.3 6.3-2.2L5 3.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div>
+              <h3>控制别人</h3>
+              <p>用这台手机操控另一台手机</p>
+            </div>
+            <div class="arrow">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+
+          <div class="role-card" data-go="guide">
+            <div class="ri">
+              <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="4" width="18" height="13" rx="2.2" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M9 21h6M12 17v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                <circle cx="12" cy="10.5" r="2.6" stroke="currentColor" stroke-width="1.7"/>
+              </svg>
+            </div>
+            <div>
+              <h3>被控制</h3>
+              <p>把这块屏幕分享给另一台手机</p>
+            </div>
+            <div class="arrow">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+
+          <div class="role-foot">
+            被控端需要开启无障碍服务与录屏授权<br>每次会话都需要你本人确认
+          </div>
+        </div>
+
+        <!-- ============ 02 设备首页 ============ -->
+        <div class="view" id="v-devices">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar">
+            <div class="iconbtn" data-go="role" style="background:transparent;border:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2>我的设备</h2>
+            <div class="spacer"></div>
+            <div class="iconbtn" data-go="settings">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.64 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="iconbtn" data-go="scan">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 12h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+          </div>
+
+          <div class="body">
+            <div class="section-label">在线 · 2</div>
+
+            <div class="dev-card online" data-go="connecting">
+              <div class="dev-ico">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="6" y="2" width="12" height="20" rx="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 19h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <span class="dot"></span>
+              </div>
+              <div class="dev-meta">
+                <h3>客厅的小米</h3>
+                <p><span class="chip live">在线</span><span class="chip">局域网</span>2 分钟前</p>
+              </div>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:#4a5a6a"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+
+            <div class="dev-card online" data-go="connecting">
+              <div class="dev-ico">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.6" stroke="currentColor" stroke-width="1.7"/></svg>
+                <span class="dot"></span>
+              </div>
+              <div class="dev-meta">
+                <h3>书房的平板</h3>
+                <p><span class="chip live">在线</span><span class="chip">中继</span>3 天前</p>
+              </div>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:#4a5a6a"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+
+            <div class="section-label">离线 · 1</div>
+
+            <div class="dev-card">
+              <div class="dev-ico">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="6" y="2" width="12" height="20" rx="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 19h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                <span class="dot"></span>
+              </div>
+              <div class="dev-meta">
+                <h3>妈妈的手机</h3>
+                <p>昨天 20:14</p>
+              </div>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:#4a5a6a"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+
+            <button class="add-btn" data-go="scan">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+              添加设备
+            </button>
+          </div>
+        </div>
+
+        <!-- ============ 03 扫码 ============ -->
+        <div class="view" id="v-scan">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar">
+            <div class="iconbtn" data-go="devices">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2 style="font-size:15px">扫码配对</h2>
+          </div>
+
+          <div class="scan-wrap">
+            <div class="scan-grid"></div>
+            <div class="finder" data-go="connecting" style="cursor:pointer">
+              <div class="c c1"></div><div class="c c2"></div><div class="c c3"></div><div class="c c4"></div>
+              <div class="scanline"></div>
+            </div>
+            <div class="scan-hint">对准被控端手机上的二维码<br><span style="font-size:11px;color:#5A6A7A">点击取景框模拟扫码成功</span></div>
+            <div class="scan-actions">
+              <button class="ghost-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                手电筒
+              </button>
+              <button class="ghost-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                输入配对码
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ 04 连接中 ============ -->
+        <div class="view" id="v-connecting">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar" style="padding-bottom:0">
+            <div class="iconbtn" data-go="devices" style="background:transparent;border:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+
+          <div class="connecting">
+            <div class="radar">
+              <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+              <div class="core">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="6" y="2" width="12" height="20" rx="2.4" stroke="currentColor" stroke-width="2"/><path d="M10.5 19h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </div>
+            </div>
+
+            <div class="conn-title">正在连接「客厅的小米」</div>
+            <div class="conn-sub">192.168.1.42 · 局域网直连</div>
+
+            <div class="steps">
+              <div class="step done">
+                <div class="si">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div>
+                  <div class="st">建立加密通道</div>
+                  <div class="sd">DTLS 握手完成</div>
+                </div>
+              </div>
+              <div class="step done">
+                <div class="si">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div>
+                  <div class="st">协商视频参数</div>
+                  <div class="sd">H.264 硬编 · 720p · 30fps</div>
+                </div>
+              </div>
+              <div class="step now">
+                <div class="si"><div class="spin"></div></div>
+                <div>
+                  <div class="st">等待对方授权</div>
+                  <div class="sd">请在对方手机上点「允许」</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="height:34px"></div>
+            <button class="primary-btn ghost" data-go="devices">取消</button>
+          </div>
+        </div>
+
+        <!-- ============ 05 远程控制 ============ -->
+        <div class="view" id="v-remote">
+          <div class="remote">
+            <div class="remote-top">
+              <div class="iconbtn" data-go="devices" style="width:30px;height:30px;border:none;background:rgba(255,255,255,.1)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="name">客厅的小米</span>
+              <div class="spacer" style="flex:1"></div>
+              <span class="stat"><span class="pulse-dot"></span>38ms</span>
+              <span class="stat" style="color:var(--primary)">直连</span>
+              <span class="stat">2.1Mbps</span>
+            </div>
+
+            <div class="mirror">
+              <div class="mirror-inner" id="mirror">
+                <div class="m-status">
+                  <span>21:28</span>
+                  <span style="display:flex;gap:4px;align-items:center">
+                    <svg width="12" height="9" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#cfd8e0" stroke-width="1.6" stroke-linecap="round"/></svg>
+                    <svg width="16" height="9" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#cfd8e0" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#cfd8e0"/></svg>
+                  </span>
+                </div>
+                <div class="m-head">
+                  <h4>微信</h4><span class="badge">3</span>
+                  <div style="flex:1"></div>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" style="color:#8fa0ae"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/><path d="M16.5 16.5L21 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </div>
+                <div class="chat-list">
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#7ee0b8,#3fa87c)">妈</div>
+                    <div class="txt"><div class="t">妈妈</div><div class="m">你上次说的那个设置我找不到…</div></div>
+                    <div class="time">21:24</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#9bb8f0,#5b7fc4)">物</div>
+                    <div class="txt"><div class="t">物业通知</div><div class="m">本周六上午停水检修，请提前储水</div></div>
+                    <div class="time">20:58</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#f0c48a,#c98c42)">快</div>
+                    <div class="txt"><div class="t">快递小哥</div><div class="m">[图片] 放门口柜子了</div></div>
+                    <div class="time">19:12</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#c9a8e8,#8f63b8)">同</div>
+                    <div class="txt"><div class="t">大学同学群</div><div class="m">老王：过年聚会定哪天？</div></div>
+                    <div class="time">18:40</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#8ad9d0,#3f9d94)">银</div>
+                    <div class="txt"><div class="t">招商银行</div><div class="m">您尾号 8802 的账户入账 ¥8,600.00</div></div>
+                    <div class="time">17:05</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#e8a0a0,#c25555)">家</div>
+                    <div class="txt"><div class="t">家人群</div><div class="m">爸：晚饭吃了没</div></div>
+                    <div class="time">昨天</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#a8c8a0,#5f8a55)">运</div>
+                    <div class="txt"><div class="t">运动打卡群</div><div class="m">小李：今天谁跑了？接龙</div></div>
+                    <div class="time">昨天</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#b0b8c8,#6b7686)">订</div>
+                    <div class="txt"><div class="t">12306</div><div class="m">您预订的 G102 次列车已出票</div></div>
+                    <div class="time">昨天</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#e8c8a0,#b88a55)">团</div>
+                    <div class="txt"><div class="t">团购群</div><div class="m">今晚 8 点开团车厘子 🍒</div></div>
+                    <div class="time">周二</div>
+                  </div>
+                  <div class="chat">
+                    <div class="avatar" style="background:linear-gradient(140deg,#a0d8e8,#4a9db0)">同</div>
+                    <div class="txt"><div class="t">张工</div><div class="m">[文件] 需求文档 V3.docx</div></div>
+                    <div class="time">周二</div>
+                  </div>
+                </div>
+                <div class="m-tabbar">
+                  <div class="on">微信</div><div>通讯录</div><div>发现</div><div>我</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tools">
+              <div class="tool">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>返回</span>
+              </div>
+              <div class="tool">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.9"/></svg>
+                <span>主页</span>
+              </div>
+              <div class="tool">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="5" y="5" width="14" height="14" rx="2.4" stroke="currentColor" stroke-width="1.9"/></svg>
+                <span>最近</span>
+              </div>
+              <div class="sep"></div>
+              <div class="tool">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="7" width="19" height="11" rx="2.2" stroke="currentColor" stroke-width="1.8"/><path d="M6 11h.01M10 11h.01M14 11h.01M18 11h.01M7 15h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <span>键盘</span>
+              </div>
+              <div class="tool">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 9a8 8 0 0 1 13.6-3.6L20 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 15a8 8 0 0 1-13.6 3.6L4 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 20v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span>旋转</span>
+              </div>
+              <div class="sep"></div>
+              <div class="tool danger" data-go="devices">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>
+                <span>断开</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ 06 授权向导 ============ -->
+        <div class="view" id="v-guide">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar">
+            <div class="iconbtn" data-go="role">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2 style="font-size:15px">准备被控制</h2>
+          </div>
+
+          <div class="guide-head">
+            <h2>还需要 2 步<br>就能让别人操控这台手机</h2>
+            <p>这些权限只有你能授予，系统不允许任何 App 跳过</p>
+          </div>
+
+          <div class="body">
+            <div class="gstep ok">
+              <div class="gi">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="gc">
+                <h4>开启无障碍服务 <span class="tag gray">已完成</span></h4>
+                <p>用于接收对方发来的点击与滑动手势</p>
+              </div>
+              <button class="go done">已开启</button>
+            </div>
+
+            <div class="gstep">
+              <div class="gi">2</div>
+              <div class="gc">
+                <h4>关闭电池优化 <span class="tag gray">建议</span></h4>
+                <p>否则锁屏后系统可能断开连接，小米 / OPPO 还需开启「自启动」</p>
+              </div>
+              <button class="go">去设置</button>
+            </div>
+
+            <div style="height:10px"></div>
+            <div class="warn-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex:0 0 15px;margin-top:1px"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v5.5M12 16.2v.1" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+              <span>首次通过安装包安装时，无障碍开关可能显示为灰色。需先到「设置 → 应用 → 掌驭 → 右上角 ⋮ → 允许受限设置」。</span>
+            </div>
+
+            <button class="primary-btn" data-go="host">下一步：显示配对码</button>
+          </div>
+        </div>
+
+        <!-- ============ 07 等待连接 ============ -->
+        <div class="view" id="v-host">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar">
+            <div class="iconbtn" data-go="guide">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2 style="font-size:15px">等待连接</h2>
+            <div class="spacer"></div>
+            <div class="iconbtn" data-go="settings">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </div>
+          </div>
+
+          <div class="host-pill">
+            <span class="pulse-dot"></span>
+            <span>已就绪，等待对方扫码</span>
+          </div>
+
+          <div class="body" style="overflow:visible">
+            <div class="qr-wrap" data-go="request" style="cursor:pointer">
+              <div class="qr" id="qrcode"></div>
+              <div class="cap">让对方用「掌驭」扫这个码<br><span style="color:#9aa8b0">点击二维码模拟收到请求</span></div>
+            </div>
+
+            <div class="host-info">
+              <div class="info-box">
+                <div class="k">本机名称</div>
+                <div class="v">客厅的小米</div>
+              </div>
+              <div class="info-box">
+                <div class="k">局域网地址</div>
+                <div class="v">192.168.1.42</div>
+              </div>
+            </div>
+
+            <div style="height:14px"></div>
+            <div class="warn-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex:0 0 15px;margin-top:1px"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v5.5M12 16.2v.1" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+              <span>请保持屏幕常亮。锁屏后系统会立即终止投屏，这是 Android 的限制。</span>
+            </div>
+
+            <button class="primary-btn ghost">停止共享</button>
+          </div>
+
+          <!-- 08 请求弹窗 -->
+          <div class="overlay" id="ov-request">
+            <div class="dialog">
+              <div class="who">
+                <svg width="27" height="27" viewBox="0 0 24 24" fill="none"><rect x="6" y="2" width="12" height="20" rx="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="9" r="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M10.5 19h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </div>
+              <h3><b>永强的手机</b> 请求<br>控制这台设备</h3>
+              <p>允许后对方可以看到你的屏幕<br>并能进行点击、滑动等操作</p>
+              <div class="countdown"><i></i></div>
+              <div class="dialog-actions">
+                <button data-go="host">拒绝</button>
+                <button class="ok" data-go="active">允许控制</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ 09 正在被控 ============ -->
+        <div class="view" id="v-active">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar" style="padding-bottom:0">
+            <div class="iconbtn" data-go="host" style="background:transparent;border:none">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+
+          <div class="active-wrap">
+            <div class="live-ring">
+              <div class="live-core">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.4" fill="#fff" opacity=".95"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2" stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity=".85"/></svg>
+              </div>
+            </div>
+
+            <div class="active-title">正在被 <b>永强的手机</b> 控制</div>
+            <div class="active-sub">对方可以看到这块屏幕<br>并操作上面的内容</div>
+
+            <div class="timer">00:12:34</div>
+
+            <div class="warn-box">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex:0 0 15px;margin-top:1px"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5v5.5M12 16.2v.1" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+              <span>支付密码、验证码等敏感界面对方同样可见，涉及资金操作时请先断开</span>
+            </div>
+
+            <button class="primary-btn danger" data-go="host">立即断开连接</button>
+          </div>
+        </div>
+
+        <!-- ============ 10 设置 ============ -->
+        <div class="view" id="v-settings">
+          <div class="statusbar"><span>21:28</span><span class="icons">
+            <svg width="15" height="11" viewBox="0 0 15 11" fill="none"><path d="M1 8V9.5M4.5 5.5V9.5M8 3V9.5M11.5 1V9.5" stroke="#E8F0F7" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".6" y=".6" width="18" height="9.8" rx="2.6" stroke="#E8F0F7" stroke-opacity=".5"/><rect x="2.2" y="2.2" width="13" height="6.6" rx="1.4" fill="#E8F0F7"/></svg>
+          </span></div>
+
+          <div class="topbar">
+            <div class="iconbtn" data-go="devices">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h2 style="font-size:15px">设置</h2>
+          </div>
+
+          <div class="body">
+            <div class="section-label">画质</div>
+            <div class="set-group">
+              <div class="set-row">
+                <span class="k">清晰度</span>
+                <div class="seg">
+                  <div>流畅</div><div class="on">均衡</div><div>高清</div>
+                </div>
+              </div>
+              <div class="set-row">
+                <span class="k">帧率上限</span>
+                <span class="v">30 fps</span>
+              </div>
+              <div class="set-row">
+                <span class="k">编码器</span>
+                <span class="v">H.264 硬件</span>
+              </div>
+            </div>
+
+            <div class="section-label">交互</div>
+            <div class="set-group">
+              <div class="set-row">
+                <span class="k">触摸位置提示</span>
+                <div class="switch on"></div>
+              </div>
+              <div class="set-row">
+                <span class="k">画面适应方式</span>
+                <span class="v">保持比例</span>
+              </div>
+              <div class="set-row">
+                <span class="k">连接失败自动重试</span>
+                <div class="switch on"></div>
+              </div>
+            </div>
+
+            <div class="section-label">安全</div>
+            <div class="set-group">
+              <div class="set-row">
+                <span class="k">被控时需本人确认</span>
+                <div class="switch on"></div>
+              </div>
+              <div class="set-row">
+                <span class="k">本机设备名</span>
+                <span class="v">客厅的小米 ›</span>
+              </div>
+            </div>
+
+            <div class="section-label">关于</div>
+            <div class="set-group">
+              <div class="set-row">
+                <span class="k">版本</span>
+                <span class="v">0.1.0 (1)</span>
+              </div>
+              <div class="set-row">
+                <span class="k">开源许可</span>
+                <span class="v">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- 视图切换 ----
+  const views = {
+    role: 'v-role', devices: 'v-devices', scan: 'v-scan', connecting: 'v-connecting',
+    remote: 'v-remote', guide: 'v-guide', host: 'v-host',
+    active: 'v-active', settings: 'v-settings'
+  };
+  const navBtns = [...document.querySelectorAll('.nav button')];
+
+  function go(key) {
+    if (key === 'request') {
+      // 请求弹窗叠在“等待连接”页上
+      show('host');
+      document.getElementById('ov-request').classList.add('show');
+      markNav('request');
+      return;
+    }
+    document.getElementById('ov-request').classList.remove('show');
+    show(key);
+    markNav(key);
+  }
+
+  function show(key) {
+    Object.values(views).forEach(id => {
+      const cur = document.getElementById(id);
+      if (cur) cur.classList.remove('active');
+    });
+    const el = document.getElementById(views[key]);
+    if (el) el.classList.add('active');
+  }
+
+  function markNav(key) {
+    navBtns.forEach(b => b.classList.toggle('on', b.dataset.go === key));
+  }
+
+  document.querySelectorAll('[data-go]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      go(el.dataset.go);
+    });
+  });
+
+  // ---- 轻提示 ----
+  let toastTimer = null;
+  function toast(msg) {
+    let el = document.querySelector('.toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'toast';
+      document.querySelector('.screen').appendChild(el);
+    }
+    el.textContent = msg;
+    requestAnimationFrame(() => el.classList.add('show'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  }
+
+  // 角色选择页的返回 = 退出应用
+  document.querySelectorAll('[data-act="exit"]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      toast('已是最初页面，真机上此键会退出应用');
+    });
+  });
+
+  // 点击 overlay 空白处关闭
+  document.getElementById('ov-request').addEventListener('click', e => {
+    if (e.target.id === 'ov-request') { e.currentTarget.classList.remove('show'); go('host'); }
+  });
+
+  // ---- 伪二维码 ----
+  (function buildQr() {
+    const qr = document.getElementById('qrcode');
+    const N = 25;
+    const grid = Array.from({ length: N }, () => Array(N).fill(0));
+
+    // 三个定位角
+    function finder(r0, c0) {
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) {
+        const edge = r === 0 || r === 6 || c === 0 || c === 6;
+        const core = r >= 2 && r <= 4 && c >= 2 && c <= 4;
+        grid[r0 + r][c0 + c] = (edge || core) ? 1 : 0;
+      }
+    }
+    finder(0, 0); finder(0, N - 7); finder(N - 7, 0);
+
+    // 时序线
+    for (let i = 8; i < N - 8; i++) {
+      grid[6][i] = i % 2 === 0 ? 1 : 0;
+      grid[i][6] = i % 2 === 0 ? 1 : 0;
+    }
+
+    // 伪随机数据区（固定种子，保证每次一致）
+    let seed = 20261102;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const inFinder = (r < 8 && c < 8) || (r < 8 && c >= N - 8) || (r >= N - 8 && c < 8);
+      if (inFinder || r === 6 || c === 6) continue;
+      grid[r][c] = rnd() > 0.48 ? 1 : 0;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      const i = document.createElement('i');
+      if (grid[r][c]) i.className = 'b';
+      frag.appendChild(i);
+    }
+    qr.appendChild(frag);
+  })();
+
+  // ---- 触摸圆点 ----
+  const mirror = document.getElementById('mirror');
+  mirror.addEventListener('pointerdown', e => {
+    const rect = mirror.getBoundingClientRect();
+    const dot = document.createElement('div');
+    dot.className = 'touch-dot';
+    dot.style.left = (e.clientX - rect.left) + 'px';
+    dot.style.top = (e.clientY - rect.top) + 'px';
+    mirror.appendChild(dot);
+    setTimeout(() => dot.remove(), 650);
+  });
+
+  // 支持网址锚点直达某屏，如 prototype.html#remote（request 为叠在等待页上的弹窗）
+  const initial = location.hash.slice(1);
+  if (initial && (views[initial] || initial === 'request')) go(initial);
+
+  // ---- 分段控件 ----
+  document.querySelectorAll('.seg').forEach(seg => {
+    seg.querySelectorAll('div').forEach(d => d.addEventListener('click', e => {
+      e.stopPropagation();
+      seg.querySelectorAll('div').forEach(x => x.classList.remove('on'));
+      d.classList.add('on');
+    }));
+  });
+
+  // ---- 开关 ----
+  document.querySelectorAll('.switch').forEach(s => s.addEventListener('click', e => {
+    e.stopPropagation();
+    s.classList.toggle('on');
+  }));
+</script>
+</body>
+</html>
