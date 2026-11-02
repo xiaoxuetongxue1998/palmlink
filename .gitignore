@@ -11,3 +11,6 @@ captures/
 
 # 原型验证用的临时截图
 design/_*.png
+
+# 工作区内部数据（记忆/缓存），不入库
+.workbuddy/
