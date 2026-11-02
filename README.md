@@ -5,7 +5,7 @@
 - **控制端**：看对方屏幕，点、滑、返回、主页
 - **被控端**：共享屏幕，用无障碍服务接收手势
 
-> 当前状态：**S0 工程骨架**。界面原型已完成（`design/prototype.html`），UI 定稿中；屏幕流与触控注入尚未接入。
+> 当前状态：**S0 工程骨架**。10 屏界面已定稿，屏幕流与触控注入尚未接入。
 
 ---
 
@@ -72,7 +72,6 @@ gradle :app:assembleDebug
 
 ```
 app/                    单 APK 入口（控制端 + 被控端双角色）
-design/prototype.html   10 屏可点击界面原型
 docs/                   方案与技术文档
 .github/workflows/      云编译
 gradle/libs.versions.toml  依赖版本集中管理
