@@ -81,7 +81,7 @@ fun PalmTopBar(title: String, onBack: (() -> Unit)? = null) {
 }
 
 @Composable
-fun StatusPill(text: String, color: Ok) {
+fun StatusPill(text: String, color: androidx.compose.ui.graphics.Color = Ok) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
