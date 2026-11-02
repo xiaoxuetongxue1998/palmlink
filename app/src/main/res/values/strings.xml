@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">掌驭</string>
+    <string name="a11y_label">掌驭 远程控制服务</string>
+    <string name="a11y_desc">接收远程控制端发来的点击、滑动与导航指令并注入到本机。仅在会话被你明确允许后工作。</string>
 </resources>

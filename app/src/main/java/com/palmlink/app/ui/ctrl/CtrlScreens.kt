@@ -13,6 +13,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -68,6 +72,8 @@ import com.palmlink.app.ui.TextMain
 import com.palmlink.app.ui.TextMuted
 import com.palmlink.app.ui.TipBar
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.webrtc.SurfaceViewRenderer
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -367,11 +373,30 @@ private fun StepRow(text: String, done: Boolean, spinning: Boolean = false) {
     }
 }
 
-// ---------- 远程控制（S3 占位：S4 接入画面） ----------
+// ---------- 远程控制（收流 + 触控） ----------
 
 @Composable
 fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
     val rtt by client.rtt.collectAsState()
+    val remoteW by client.rtc?.remoteW?.collectAsState() ?: remember { mutableStateOf(0) }
+    val remoteH by client.rtc?.remoteH?.collectAsState() ?: remember { mutableStateOf(0) }
+    val hasVideo by (client.rtc?.trackReady ?: MutableStateFlow(null)).collectAsState()
+
+    var lastMoveAt by remember { mutableStateOf(0L) }
+
+    fun mapAndSend(action: String, px: Float, py: Float, vw: Int, vh: Int): Boolean {
+        val w = remoteW
+        val h = remoteH
+        if (w <= 0 || h <= 0 || vw <= 0 || vh <= 0) return false
+        val scale = minOf(vw.toFloat() / w, vh.toFloat() / h)
+        val ox = (vw - w * scale) / 2f
+        val oy = (vh - h * scale) / 2f
+        val x = (px - ox) / scale
+        val y = (py - oy) / scale
+        if (x < 0f || y < 0f || x > w || y > h) return false
+        client.sendTouch(action, (x / w).toDouble(), (y / h).toDouble())
+        return true
+    }
 
     Column(
         Modifier
@@ -418,27 +443,63 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0F141A)),
-            contentAlignment = Alignment.Center
+                .background(Color(0xFF0F141A))
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("已连接", color = Ok, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "对方屏幕画面将在 S4 版本出现\n当前已打通：扫码 → 握手 → 授权 → 数据通道",
-                    color = TextMuted, fontSize = 12.sp, lineHeight = 19.sp,
-                    textAlign = TextAlign.Center
-                )
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            mapAndSend("down", down.position.x, down.position.y, size.width, size.height)
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull() ?: break
+                                if (ch.pressed) {
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastMoveAt > 24) {
+                                        lastMoveAt = now
+                                        mapAndSend("move", ch.position.x, ch.position.y, size.width, size.height)
+                                    }
+                                    ch.consume()
+                                } else {
+                                    mapAndSend("up", ch.position.x, ch.position.y, size.width, size.height)
+                                    break
+                                }
+                            }
+                        }
+                    },
+                factory = { vctx ->
+                    SurfaceViewRenderer(vctx).also { r ->
+                        r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
+                        client.rtc?.attachRenderer(r)
+                    }
+                },
+                onRelease = { r ->
+                    client.rtc?.detachRenderer()
+                    runCatching { r.release() }
+                }
+            )
+            if (hasVideo == null) {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
+                }
             }
         }
 
         Spacer(Modifier.height(14.dp))
         Row(Modifier.fillMaxWidth()) {
-            ToolChip("返回", Modifier.weight(1f))
+            ToolChip("返回", Modifier.weight(1f)) { client.sendNav("back") }
             Spacer(Modifier.width(10.dp))
-            ToolChip("主页", Modifier.weight(1f))
+            ToolChip("主页", Modifier.weight(1f)) { client.sendNav("home") }
             Spacer(Modifier.width(10.dp))
-            ToolChip("最近任务", Modifier.weight(1f))
+            ToolChip("最近任务", Modifier.weight(1f)) { client.sendNav("recents") }
         }
         Spacer(Modifier.height(12.dp))
         PalmButton(
@@ -453,11 +514,12 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
 }
 
 @Composable
-private fun ToolChip(text: String, modifier: Modifier = Modifier) {
+private fun ToolChip(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier
             .clip(RoundedCornerShape(12.dp))
             .background(Surface1)
+            .clickable(onClick = onClick)
             .padding(vertical = 11.dp),
         contentAlignment = Alignment.Center
     ) {

@@ -9,7 +9,10 @@ data class WsMsg(
     val type: String,
     val name: String? = null,
     val t: Long? = null,
-    val reason: String? = null
+    val reason: String? = null,
+    val data: String? = null,
+    val w: Int? = null,
+    val h: Int? = null
 ) {
     companion object {
         // 消息类型约定：
@@ -19,8 +22,29 @@ data class WsMsg(
         // ping     控制端 -> 被控端：t=发送时刻毫秒
         // pong     被控端 -> 控制端：原样回传 t
         // bye      任意一方 -> 对方：主动断开
+        // offer    被控端 -> 控制端：WebRTC SDP offer（data=sdp，w/h=采集分辨率）
+        // answer   控制端 -> 被控端：WebRTC SDP answer（data=sdp）
+        // ice      双向：ICE 候选（data=IcePayload JSON）
     }
 }
+
+/** ICE 候选的 JSON 载荷（走 WsMsg.data） */
+@Serializable
+data class IcePayload(
+    val mid: String? = "",
+    val mline: Int,
+    val sdp: String
+)
+
+/** DataChannel 上的控制指令（触控/导航） */
+@Serializable
+data class CtrlMsg(
+    val t: String,          // touch | nav
+    val a: String? = null,  // touch: down | move | up
+    val k: String? = null,  // nav: back | home | recents
+    val x: Double? = null,  // 归一化坐标 0..1
+    val y: Double? = null
+)
 
 /** 二维码配对载荷 */
 @Serializable

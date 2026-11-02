@@ -1,5 +1,6 @@
 package com.palmlink.app.net
 
+import android.content.Context
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
@@ -26,8 +27,15 @@ class ControllerClient(val payload: PairPayload) {
     val rtt = MutableStateFlow(-1)
 
     private var client: HttpClient? = null
+    var rtc: WebRtcCtrl? = null
+        private set
 
     fun start() {
+        rtc = WebRtcCtrl({ msg ->
+            scope.launch {
+                runCatching { wsSession?.send(Frame.Text(WsJson.encodeToString(msg))) }
+            }
+        })
         scope.launch {
             try {
                 val c = HttpClient {
@@ -35,6 +43,7 @@ class ControllerClient(val payload: PairPayload) {
                 }
                 client = c
                 c.webSocket(urlString = "ws://${payload.ip}:${payload.port}/ws?token=${payload.token}") {
+                    wsSession = this
                     send(Frame.Text(WsJson.encodeToString(WsMsg(type = "request", name = deviceName()))))
                     stage.value = CtrlStage.Requesting
 
@@ -60,6 +69,7 @@ class ControllerClient(val payload: PairPayload) {
                             "pong" -> msg.t?.let {
                                 rtt.value = (System.currentTimeMillis() - it).toInt()
                             }
+                            "offer", "ice" -> rtc?.onSignal(msg)
                             "bye" -> { stage.value = CtrlStage.PeerClosed; break@loop }
                         }
                     }
@@ -76,8 +86,21 @@ class ControllerClient(val payload: PairPayload) {
         }
     }
 
+    @Volatile
+    private var wsSession: io.ktor.websocket.DefaultWebSocketSession? = null
+
+    fun sendNav(key: String) {
+        rtc?.sendCtrl(CtrlMsg(t = "nav", k = key))
+    }
+
+    fun sendTouch(action: String, xn: Double, yn: Double) {
+        rtc?.sendCtrl(CtrlMsg(t = "touch", a = action, x = xn, y = yn))
+    }
+
     fun disconnect() {
         stage.value = CtrlStage.Stopped
+        rtc?.close()
+        rtc = null
         val c = client
         client = null
         scope.launch {

@@ -16,8 +16,8 @@ android {
         applicationId = "com.palmlink.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
@@ -81,6 +81,9 @@ dependencies {
     implementation(libs.camera.view)
     implementation(libs.mlkit.barcode)
     implementation(libs.zxing.core)
+
+    // S4: WebRTC 屏幕流（含硬件 H.264 编解码）
+    implementation(libs.webrtc.android)
 
     debugImplementation(libs.compose.ui.tooling)
 }

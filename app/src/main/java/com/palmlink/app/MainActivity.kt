@@ -41,6 +41,7 @@ import com.palmlink.app.net.CtrlStage
 import com.palmlink.app.net.HostSession
 import com.palmlink.app.net.HostStage
 import com.palmlink.app.net.PairPayload
+import com.palmlink.app.net.WebRtcCtrl
 import com.palmlink.app.ui.BgBase
 import com.palmlink.app.ui.OnPrimary
 import com.palmlink.app.ui.PalmLinkTheme
@@ -57,6 +58,7 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WebRtcCtrl.appContext = applicationContext
         enableEdgeToEdge()
         setContent {
             PalmLinkTheme {
@@ -168,7 +170,7 @@ private fun RoleScreen(onHost: () -> Unit, onCtrl: () -> Unit) {
 
         Spacer(Modifier.height(30.dp))
         Text(
-            "v0.2 · S3 局域网连通\n首次使用建议两台手机连同一个 WiFi",
+            "v0.3 · 局域网投屏 + 手势控制\n被控端请在系统设置中开启掌驭的无障碍服务",
             color = TextDim,
             fontSize = 11.sp,
             lineHeight = 17.sp,

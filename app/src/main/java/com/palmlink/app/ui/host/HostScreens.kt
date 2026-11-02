@@ -64,7 +64,7 @@ import kotlinx.coroutines.delay
 // ---------- 授权向导（S3 简化版：仅提示，无系统授权操作） ----------
 
 @Composable
-fun HostGuideScreen(onStart: () -> Unit, onBack: () -> Unit) {
+fun HostGuideScreen(onStart: () -> Unit, onBack: () -> Unit, onOpenA11y: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
@@ -90,9 +90,11 @@ fun HostGuideScreen(onStart: () -> Unit, onBack: () -> Unit) {
         StepCard(
             num = "1",
             title = "开启无障碍服务",
-            desc = "用于接收对方发来的点击与滑动手势（S5 接入，当前版本可跳过）",
-            tag = "S5 接入"
+            desc = "用于接收对方发来的点击与滑动。系统设置 → 已下载的应用 → 掌驭 → 开启",
+            tag = "必填"
         )
+        Spacer(Modifier.height(10.dp))
+        PalmButton("去开启无障碍设置", Modifier.fillMaxWidth(), primary = false, onClick = onOpenA11y)
         Spacer(Modifier.height(10.dp))
         StepCard(
             num = "2",
@@ -142,7 +144,12 @@ private fun StepCard(num: String, title: String, desc: String, tag: String) {
 // ---------- 等待连接（二维码 + 控制请求弹窗） ----------
 
 @Composable
-fun HostWaitingScreen(host: HostSession, stage: HostStage, onBack: () -> Unit) {
+fun HostWaitingScreen(
+    host: HostSession,
+    stage: HostStage,
+    onBack: () -> Unit,
+    onAllow: () -> Unit
+) {
     val payload by host.qrPayload.collectAsState()
     val peerName by host.peerName.collectAsState()
 
@@ -205,7 +212,7 @@ fun HostWaitingScreen(host: HostSession, stage: HostStage, onBack: () -> Unit) {
         if (stage == HostStage.Requested) {
             RequestDialog(
                 name = peerName,
-                onAllow = host::approve,
+                onAllow = onAllow,
                 onDeny = host::deny
             )
         }
@@ -311,7 +318,7 @@ private fun RequestDialog(name: String?, onAllow: () -> Unit, onDeny: () -> Unit
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "允许后对方将看到你的屏幕并可以操作",
+                "允许后系统会请求屏幕录制，请点「立即开始」",
                 color = TextMuted, fontSize = 12.sp
             )
             Spacer(Modifier.height(16.dp))
