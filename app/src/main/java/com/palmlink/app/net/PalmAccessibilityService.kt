@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Path
 import android.graphics.Rect
 import android.os.Build
+import android.os.SystemClock
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 
@@ -50,23 +51,82 @@ class PalmAccessibilityService : AccessibilityService() {
         return intArrayOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
     }
 
-    fun tap(xn: Double, yn: Double) {
-        stroke(xn, yn, xn, yn, 60)
+    // ---------------- 手势聚合 ----------------
+    // 无障碍的 dispatchGesture 只能一次性注入「一条完整手势」，不能像真实手指那样持续流式下发。
+    // 因此这里把一次触摸的 down/move/up 全部攒成一条路径，抬手时一次性执行：
+    //   · 路径包含所有中间点，滑动轨迹才会跟手（不是直线插值）
+    //   · 时长取用户实际按住的时间，系统才能算出正确速度，翻页/惯性滚动才会生效
+    // （如果每段 move 单独注入，就是几十个互不相干的微型滑动，系统永远不会触发 fling）
+
+    private val pts = ArrayList<DoubleArray>(128)
+    private var downAt = 0L
+
+    /** 手指按下：记录起点 */
+    fun beginGesture(xn: Double, yn: Double) {
+        pts.clear()
+        pts.add(doubleArrayOf(xn, yn))
+        downAt = SystemClock.uptimeMillis()
     }
 
-    /** 归一化坐标的滑动/拖动；起点终点相同时即为点击 */
-    fun stroke(x1n: Double, y1n: Double, x2n: Double, y2n: Double, durationMs: Long) {
-        val (w, h) = screenSize()
-        val x1 = (x1n * w).toFloat()
-        val y1 = (y1n * h).toFloat()
-        val x2 = (x2n * w).toFloat()
-        val y2 = (y2n * h).toFloat()
-        val path = Path().apply {
-            moveTo(x1, y1)
-            lineTo(x2, y2)
+    /** 手指移动：累积轨迹点（过滤抖动，避免点数爆炸） */
+    fun extendGesture(xn: Double, yn: Double) {
+        val last = pts.lastOrNull()
+        if (last == null) {
+            beginGesture(xn, yn)
+            return
         }
+        val dx = xn - last[0]
+        val dy = yn - last[1]
+        if (dx * dx + dy * dy < 0.000004) return
+        pts.add(doubleArrayOf(xn, yn))
+        // 只保留起点 + 最近的轨迹，防止长时间拖动撑爆
+        if (pts.size > 240) pts.removeAt(1)
+    }
+
+    /** 手指抬起：整段轨迹一次性注入 */
+    fun endGesture(xn: Double, yn: Double) {
+        if (pts.isEmpty()) pts.add(doubleArrayOf(xn, yn))
+        val last = pts.last()
+        if (last[0] != xn || last[1] != yn) pts.add(doubleArrayOf(xn, yn))
+
+        val held = (SystemClock.uptimeMillis() - downAt).coerceIn(0L, 3000L)
+        val (w, h) = screenSize()
+
+        val first = pts.first()
+        val end = pts.last()
+        val dxPx = (end[0] - first[0]) * w
+        val dyPx = (end[1] - first[1]) * h
+        val dist = kotlin.math.hypot(dxPx, dyPx)
+
+        val path = Path()
+        path.moveTo((first[0] * w).toFloat(), (first[1] * h).toFloat())
+        if (pts.size == 1) {
+            // 路径只有 moveTo 时 StrokeDescription 会认为无效，补一个极小位移
+            path.lineTo((first[0] * w).toFloat() + 1f, (first[1] * h).toFloat() + 1f)
+        } else {
+            for (i in 1 until pts.size) {
+                path.lineTo((pts[i][0] * w).toFloat(), (pts[i][1] * h).toFloat())
+            }
+        }
+
+        val duration = when {
+            // 几乎没位移 + 时间短 => 点击
+            dist < 12.0 && held < 220 -> 60L
+            // 几乎没位移 + 时间长 => 长按
+            dist < 12.0 -> held.coerceIn(480, 900)
+            // 滑动：按真实速度执行（保留甩动惯性），但最长 320ms，
+            // 否则抬手后还要"重放"整段时长，手感会拖
+            else -> held.coerceIn(80, 320)
+        }
+        dispatchPath(path, duration)
+        pts.clear()
+    }
+
+    private fun dispatchPath(path: Path, durationMs: Long) {
         val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(60, 900)))
+            .addStroke(
+                GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(20, 1500))
+            )
             .build()
         dispatchGesture(gesture, null, null)
     }

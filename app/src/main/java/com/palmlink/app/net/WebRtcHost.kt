@@ -231,21 +231,9 @@ class WebRtcHost(
                         main.post {
                             val s = PalmAccessibilityService.instance ?: return@post
                             when (a) {
-                                "down" -> lastDown = doubleArrayOf(x, y)
-                                "move" -> lastDown?.let {
-                                    s.stroke(it[0], it[1], x, y, 16)
-                                    lastDown = doubleArrayOf(x, y)
-                                }
-                                "up" -> {
-                                    val d = lastDown
-                                    lastDown = null
-                                    if (d != null) {
-                                        val dx = (x - d[0])
-                                        val dy = (y - d[1])
-                                        if (dx * dx + dy * dy < 0.00002) s.tap(x, y)
-                                        else s.stroke(d[0], d[1], x, y, swipeDuration(dx, dy))
-                                    }
-                                }
+                                "down" -> s.beginGesture(x, y)
+                                "move" -> s.extendGesture(x, y)
+                                "up" -> s.endGesture(x, y)
                             }
                         }
                     }
@@ -258,11 +246,6 @@ class WebRtcHost(
                 }
             }
         }
-
-    private var lastDown: DoubleArray? = null
-
-    private fun swipeDuration(dx: Double, dy: Double): Long =
-        (Math.sqrt(dx * dx + dy * dy) * 900).toLong().coerceIn(120, 700)
 
     fun onSignal(msg: WsMsg) {
         val connection = pc ?: return

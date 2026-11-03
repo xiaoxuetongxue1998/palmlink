@@ -472,7 +472,8 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
                                     val ch = ev.changes.firstOrNull() ?: break
                                     if (ch.pressed) {
                                         val now = System.currentTimeMillis()
-                                        if (now - lastMoveAt > 24) {
+                                        // 60Hz 采样，保证被控端拿到的轨迹足够细，滑动/惯性才自然
+                                        if (now - lastMoveAt > 16) {
                                             lastMoveAt = now
                                             send("move", ch.position.x, ch.position.y, size.width, size.height)
                                         }
