@@ -11,6 +11,8 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -62,6 +64,21 @@ class WebRtcCtrl(private val send: (WsMsg) -> Unit) {
     val remoteH = MutableStateFlow(0)
     val trackReady = MutableStateFlow<VideoTrack?>(null)
 
+    /** 解码后真实帧尺寸（含旋转后），布局与触控映射以它为准 */
+    val videoW = MutableStateFlow(0)
+    val videoH = MutableStateFlow(0)
+
+    private val frameSizeSink = object : VideoSink {
+        override fun onFrame(frame: VideoFrame) {
+            val w = frame.rotatedWidth
+            val h = frame.rotatedHeight
+            if (w > 0 && h > 0 && (videoW.value != w || videoH.value != h)) {
+                videoW.value = w
+                videoH.value = h
+            }
+        }
+    }
+
     init {
         val f = buildFactory()
         val init = PeerConnection.RTCConfiguration(emptyList()).apply {
@@ -96,6 +113,7 @@ class WebRtcCtrl(private val send: (WsMsg) -> Unit) {
                 if (t is VideoTrack) {
                     track = t
                     trackReady.value = t
+                    t.addSink(frameSizeSink)
                     t.addSink(renderer ?: return)
                 }
             }
@@ -147,6 +165,8 @@ class WebRtcCtrl(private val send: (WsMsg) -> Unit) {
 
     fun attachRenderer(r: SurfaceViewRenderer) {
         renderer = r
+        // 显式指定等比完整显示，避免默认策略裁掉画面上下部分
+        runCatching { r.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT) }
         track?.addSink(r)
     }
 
@@ -161,8 +181,11 @@ class WebRtcCtrl(private val send: (WsMsg) -> Unit) {
 
     fun close() {
         detachRenderer()
+        track?.let { t -> runCatching { t.removeSink(frameSizeSink) } }
         track = null
         trackReady.value = null
+        videoW.value = 0
+        videoH.value = 0
         runCatching { dc?.close() }
         dc = null
         runCatching { pc?.close() }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -381,22 +382,25 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
     val rtt by client.rtt.collectAsState()
     val remoteW by client.rtc?.remoteW?.collectAsState() ?: remember { mutableStateOf(0) }
     val remoteH by client.rtc?.remoteH?.collectAsState() ?: remember { mutableStateOf(0) }
+    val frameW by client.rtc?.videoW?.collectAsState() ?: remember { mutableStateOf(0) }
+    val frameH by client.rtc?.videoH?.collectAsState() ?: remember { mutableStateOf(0) }
     val hasVideo by (client.rtc?.trackReady ?: MutableStateFlow(null)).collectAsState()
+
+    // 画面宽高比以解码后的真实帧为准；还没收到帧时退回 offer 里的屏幕尺寸
+    val vw = if (frameW > 0) frameW else remoteW
+    val vh = if (frameH > 0) frameH else remoteH
+    val aspect = if (vw > 0 && vh > 0) vw.toFloat() / vh.toFloat() else 9f / 20f
 
     var lastMoveAt by remember { mutableStateOf(0L) }
 
-    fun mapAndSend(action: String, px: Float, py: Float, vw: Int, vh: Int): Boolean {
-        val w = remoteW
-        val h = remoteH
-        if (w <= 0 || h <= 0 || vw <= 0 || vh <= 0) return false
-        val scale = minOf(vw.toFloat() / w, vh.toFloat() / h)
-        val ox = (vw - w * scale) / 2f
-        val oy = (vh - h * scale) / 2f
-        val x = (px - ox) / scale
-        val y = (py - oy) / scale
-        if (x < 0f || y < 0f || x > w || y > h) return false
-        client.sendTouch(action, (x / w).toDouble(), (y / h).toDouble())
-        return true
+    /** 视图与画面宽高比完全一致，所以直接按视图尺寸归一化即可，没有黑边补偿误差 */
+    fun send(action: String, px: Float, py: Float, w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
+        client.sendTouch(
+            action,
+            (px / w).coerceIn(0f, 1f).toDouble(),
+            (py / h).coerceIn(0f, 1f).toDouble()
+        )
     }
 
     Column(
@@ -439,57 +443,79 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
 
         Spacer(Modifier.height(14.dp))
 
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0F141A))
+                .background(Color(0xFF0F141A)),
+            contentAlignment = Alignment.Center
         ) {
-            AndroidView(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            mapAndSend("down", down.position.x, down.position.y, size.width, size.height)
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull() ?: break
-                                if (ch.pressed) {
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastMoveAt > 24) {
-                                        lastMoveAt = now
-                                        mapAndSend("move", ch.position.x, ch.position.y, size.width, size.height)
+            // 让画面容器精确等于视频宽高比：既不裁切，也不留黑边
+            val boxW = if (maxWidth / maxHeight > aspect) maxHeight * aspect else maxWidth
+            val boxH = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
+
+            Box(
+                Modifier
+                    .size(boxW, boxH)
+                    .clip(RoundedCornerShape(14.dp))
+            ) {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(vw, vh) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                send("down", down.position.x, down.position.y, size.width, size.height)
+                                while (true) {
+                                    val ev = awaitPointerEvent()
+                                    val ch = ev.changes.firstOrNull() ?: break
+                                    if (ch.pressed) {
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastMoveAt > 24) {
+                                            lastMoveAt = now
+                                            send("move", ch.position.x, ch.position.y, size.width, size.height)
+                                        }
+                                        ch.consume()
+                                    } else {
+                                        send("up", ch.position.x, ch.position.y, size.width, size.height)
+                                        break
                                     }
-                                    ch.consume()
-                                } else {
-                                    mapAndSend("up", ch.position.x, ch.position.y, size.width, size.height)
-                                    break
                                 }
                             }
+                        },
+                    factory = { vctx ->
+                        SurfaceViewRenderer(vctx).also { r ->
+                            r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
+                            client.rtc?.attachRenderer(r)
                         }
                     },
-                factory = { vctx ->
-                    SurfaceViewRenderer(vctx).also { r ->
-                        r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
-                        client.rtc?.attachRenderer(r)
+                    onRelease = { r ->
+                        client.rtc?.detachRenderer()
+                        runCatching { r.release() }
                     }
-                },
-                onRelease = { r ->
-                    client.rtc?.detachRenderer()
-                    runCatching { r.release() }
+                )
+                if (hasVideo == null) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
+                        Spacer(Modifier.height(12.dp))
+                        Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
+                    }
                 }
-            )
-            if (hasVideo == null) {
-                Column(
-                    Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
-                    Spacer(Modifier.height(12.dp))
-                    Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
+                // 调试用：显示真实帧分辨率，便于核对画面比例与触控精度
+                if (vw > 0 && vh > 0) {
+                    Text(
+                        "${vw}×${vh}",
+                        color = TextDim,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                    )
                 }
             }
         }
