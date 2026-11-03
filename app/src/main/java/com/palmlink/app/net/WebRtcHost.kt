@@ -22,6 +22,7 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoCapturer
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 
 /** 触控指令在 DataChannel 上的收发助手 */
@@ -60,8 +61,13 @@ open class SdpBase : SdpObserver {
 class WebRtcHost(
     private val context: Context,
     private val send: (WsMsg) -> Unit,
-    private val onProjectionLost: () -> Unit
+    private val onProjectionLost: () -> Unit,
+    private val onError: (String) -> Unit = {}
 ) {
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
+
     companion object {
         @Volatile
         private var factory: PeerConnectionFactory? = null
@@ -118,7 +124,14 @@ class WebRtcHost(
     }
 
     fun start(resultCode: Int, data: Intent) {
-        captureHandler.post { startInternal(resultCode, data) }
+        // Android 14+ 要求 getMediaProjection 时已有 mediaProjection 前台服务在跑，
+        // 而 startForegroundService 是异步的，必须等它真的 startForeground 完成，否则 SecurityException
+        scope.launch {
+            runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(4000) { CaptureService.ready.await() }
+            }
+            captureHandler.post { startInternal(resultCode, data) }
+        }
     }
 
     private fun startInternal(code: Int, data: Intent) {
@@ -193,6 +206,8 @@ class WebRtcHost(
                 }
             }, MediaConstraints())
         } catch (t: Throwable) {
+            com.palmlink.app.CrashLog.write(context.filesDir, "WebRtcHost.startInternal", t)
+            onError(t.message ?: t.javaClass.simpleName)
             main.post { onProjectionLost() }
         }
     }

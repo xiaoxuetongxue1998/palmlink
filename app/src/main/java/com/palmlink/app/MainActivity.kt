@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,6 +44,7 @@ import com.palmlink.app.net.HostStage
 import com.palmlink.app.net.PairPayload
 import com.palmlink.app.net.WebRtcCtrl
 import com.palmlink.app.ui.BgBase
+import com.palmlink.app.ui.Danger
 import com.palmlink.app.ui.OnPrimary
 import com.palmlink.app.ui.PalmLinkTheme
 import com.palmlink.app.ui.Primary
@@ -169,8 +171,33 @@ private fun RoleScreen(onHost: () -> Unit, onCtrl: () -> Unit) {
         )
 
         Spacer(Modifier.height(30.dp))
+        val ctx = LocalContext.current
+        var crash by remember { mutableStateOf(CrashLog.read(ctx.filesDir)) }
+        if (crash != null) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Surface1)
+                    .clickable { CrashLog.clear(ctx.filesDir); crash = null }
+                    .padding(12.dp)
+            ) {
+                Column {
+                    Text(
+                        "上次崩溃（点此清除，截图发给小强）",
+                        color = Danger, fontSize = 11.sp, fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        crash!!.take(600),
+                        color = TextMuted, fontSize = 9.5.sp, lineHeight = 13.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
         Text(
-            "v0.3 · 局域网投屏 + 手势控制\n被控端请在系统设置中开启掌驭的无障碍服务",
+            "v0.3.1 · 局域网投屏 + 手势控制\n被控端请在系统设置中开启掌驭的无障碍服务",
             color = TextDim,
             fontSize = 11.sp,
             lineHeight = 17.sp,

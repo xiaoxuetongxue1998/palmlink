@@ -40,13 +40,18 @@ class CaptureService : Service() {
             ContextCompat.startForegroundService(ctx, i)
         }
 
+        /** 停止采集服务。注意用 stopService：Android 12+ 从后台 startForegroundService 会直接抛异常崩溃 */
         fun stop(ctx: Context) {
-            val i = Intent(ctx, CaptureService::class.java).setAction("stop")
-            ContextCompat.startForegroundService(ctx, i)
+            runCatching { ctx.stopService(Intent(ctx, CaptureService::class.java)) }
         }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        ready = newDeferred()
+        super.onDestroy()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "stop") {

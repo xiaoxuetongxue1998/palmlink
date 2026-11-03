@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -152,6 +153,12 @@ fun HostWaitingScreen(
 ) {
     val payload by host.qrPayload.collectAsState()
     val peerName by host.peerName.collectAsState()
+    var awaiting by remember { mutableStateOf(false) }
+
+    // 一旦离开“请求中”状态（授权成功/被拒/超时），重置等待标记
+    LaunchedEffect(stage) {
+        if (stage != HostStage.Requested) awaiting = false
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -212,7 +219,11 @@ fun HostWaitingScreen(
         if (stage == HostStage.Requested) {
             RequestDialog(
                 name = peerName,
-                onAllow = onAllow,
+                countdown = !awaiting,
+                onAllow = {
+                    awaiting = true
+                    onAllow()
+                },
                 onDeny = host::deny
             )
         }
@@ -274,9 +285,15 @@ private fun qrBitmap(content: String): android.graphics.Bitmap {
 }
 
 @Composable
-private fun RequestDialog(name: String?, onAllow: () -> Unit, onDeny: () -> Unit) {
+private fun RequestDialog(
+    name: String?,
+    countdown: Boolean,
+    onAllow: () -> Unit,
+    onDeny: () -> Unit
+) {
     var left by remember { mutableIntStateOf(60) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(countdown) {
+        if (!countdown) return@LaunchedEffect
         for (i in 59 downTo 0) {
             left = i
             delay(1000)
@@ -406,6 +423,16 @@ fun HostActiveScreen(host: HostSession, onBack: () -> Unit) {
             )
         }
         Spacer(Modifier.weight(1f))
+        val a11yOn = remember { com.palmlink.app.net.PalmAccessibilityService.instance != null }
+        if (!a11yOn) {
+            TipBar("无障碍服务没开：对方能看画面，但点不动。请到 设置 → 无障碍 → 掌驭 开启后重新连接。")
+            Spacer(Modifier.height(10.dp))
+        }
+        val rtcErr by host.rtcError.collectAsState()
+        if (rtcErr.isNotBlank()) {
+            TipBar("投屏出错：$rtcErr")
+            Spacer(Modifier.height(10.dp))
+        }
         TipBar("屏幕正在共享给对方。锁屏会立即中断投屏；涉及支付、验证码的界面双方都可见。")
         Spacer(Modifier.height(14.dp))
         PalmButton("断开连接", Modifier.fillMaxWidth(), danger = true, onClick = host::disconnect)

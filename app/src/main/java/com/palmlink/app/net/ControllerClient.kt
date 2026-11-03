@@ -31,11 +31,24 @@ class ControllerClient(val payload: PairPayload) {
         private set
 
     fun start() {
-        rtc = WebRtcCtrl({ msg ->
-            scope.launch {
-                runCatching { wsSession?.send(Frame.Text(WsJson.encodeToString(msg))) }
-            }
-        })
+        // WebRTC 初始化在极少数机型上会抛 UnsatisfiedLinkError / IllegalState，
+        // 这里必须兜住，否则主线程直接崩溃退出
+        runCatching {
+            rtc = WebRtcCtrl({ msg ->
+                scope.launch {
+                    runCatching { wsSession?.send(Frame.Text(WsJson.encodeToString(msg))) }
+                }
+            })
+        }.onFailure { t ->
+            com.palmlink.app.CrashLog.write(
+                (WebRtcCtrl.appContext?.filesDir) ?: return@onFailure,
+                "WebRtcCtrl 初始化",
+                t
+            )
+            detail.value = "WebRTC 初始化失败：" + (t.message ?: t.javaClass.simpleName)
+            stage.value = CtrlStage.Failed
+            return
+        }
         scope.launch {
             try {
                 val c = HttpClient {

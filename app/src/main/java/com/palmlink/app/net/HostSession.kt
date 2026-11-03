@@ -29,6 +29,9 @@ class HostSession {
     val errorMsg = MutableStateFlow("")
     val qrPayload = MutableStateFlow<PairPayload?>(null)
 
+    /** 投屏链路错误（非致命，界面提示用） */
+    val rtcError = MutableStateFlow("")
+
     var connectedAt: Long = 0L
         private set
 
@@ -94,12 +97,23 @@ class HostSession {
 
         server?.send(WsMsg(type = "approve"))
         connectedAt = System.currentTimeMillis()
+        rtcError.value = ""
         stage.value = HostStage.Active
 
         CaptureService.start(ac, resultCode, data)
-        val r = WebRtcHost(ac, { m -> server?.send(m) }, onProjectionLost = { projectionLost() })
+        val r = runCatching {
+            WebRtcHost(
+                context = ac,
+                send = { m -> server?.send(m) },
+                onProjectionLost = { projectionLost() },
+                onError = { m -> rtcError.value = m }
+            )
+        }.onFailure { t ->
+            com.palmlink.app.CrashLog.write(ac.filesDir, "WebRtcHost 初始化", t)
+            rtcError.value = t.message ?: t.javaClass.simpleName
+        }.getOrNull()
         rtc = r
-        r.start(resultCode, data)
+        r?.start(resultCode, data)
     }
 
     /** 采集被系统终止（用户停止投屏 / 出错） */
