@@ -54,18 +54,11 @@ class CaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "stop") {
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
-        val code = intent?.getIntExtra("code", -1) ?: -1
-        val data = IntentCompat.getParcelableExtra(intent ?: return notSticky(), "data", Intent::class.java)
-        if (code < 0 || data == null) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
+        // 契约优先：startForegroundService 后必须 5 秒内 startForeground，
+        // 所以第一件事就是挂通知，所有业务校验都放到这之后。
+        // （此前校验 code < 0 会把 RESULT_OK == -1 误判为无效数据，
+        //   导致 stopSelf 先于 startForeground，系统直接抛
+        //   ForegroundServiceDidNotStartInTimeException 闪退）
         createChannel()
         val notif: Notification = NotificationCompat.Builder(this, CH_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -74,16 +67,20 @@ class CaptureService : Service() {
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
-
         val type = if (Build.VERSION.SDK_INT >= 29) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         } else 0
         ServiceCompat.startForeground(this, NOTIF_ID, notif, type)
         ready.complete(true)
+
+        // 无效启动（缺投屏数据）：先完成前台契约再退出
+        val data = intent?.let { IntentCompat.getParcelableExtra(it, "data", Intent::class.java) }
+        if (data == null) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
         return START_NOT_STICKY
     }
-
-    private fun notSticky(): Int = START_NOT_STICKY
 
     private fun createChannel() {
         val nm = getSystemService(NotificationManager::class.java) ?: return
