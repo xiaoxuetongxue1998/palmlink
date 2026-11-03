@@ -1,7 +1,11 @@
 package com.palmlink.app.ui.ctrl
 
 import android.Manifest
+import android.app.Activity
 import android.content.pm.PackageManager
+import android.graphics.Rect
+import android.os.Build
+import android.view.View
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -33,6 +37,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,15 +47,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -393,6 +402,42 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
 
     var lastMoveAt by remember { mutableStateOf(0L) }
 
+    // 画面在整屏坐标系里的矩形。触控层铺满整个窗口再按这个矩形换算，
+    // 手指从屏幕物理边缘（画面外的黑边/内边距）按下也能映射到 x=0 / x=1，
+    // 否则永远够不到被控端的侧边返回区域。
+    var rootOrigin by remember { mutableStateOf(Offset.Zero) }
+    var videoRect by remember { mutableStateOf(Rect(0, 0, 0, 0)) }
+
+    // 控制端自己也开着手势导航：不加排除区，从屏幕左/右边缘起手的滑动会被本机
+    // 系统当成「返回」吞掉，画面里根本收不到事件。
+    val hostView = LocalView.current
+    DisposableEffect(hostView) {
+        val activity = hostView.context as? Activity
+        val target: View = activity?.window?.decorView ?: hostView
+        val applyRects = {
+            if (Build.VERSION.SDK_INT >= 29 && target.width > 0 && target.height > 0) {
+                val band = (200 * target.resources.displayMetrics.density).toInt()
+                    .coerceAtMost(target.width / 3)
+                ViewCompat.setSystemGestureExclusionRects(
+                    target,
+                    listOf(
+                        Rect(0, 0, band, target.height),
+                        Rect(target.width - band, 0, target.width, target.height)
+                    )
+                )
+            }
+        }
+        val listener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyRects() }
+        target.addOnLayoutChangeListener(listener)
+        target.post { applyRects() }
+        onDispose {
+            target.removeOnLayoutChangeListener(listener)
+            if (Build.VERSION.SDK_INT >= 29) {
+                ViewCompat.setSystemGestureExclusionRects(target, emptyList())
+            }
+        }
+    }
+
     /** 视图与画面宽高比完全一致，所以直接按视图尺寸归一化即可，没有黑边补偿误差 */
     fun send(action: String, px: Float, py: Float, w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
@@ -403,140 +448,163 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
         )
     }
 
-    Column(
+    Box(
         Modifier
             .fillMaxSize()
-            .padding(22.dp)
-    ) {
-        PalmTopBar("远程控制")
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Surface1)
-                .padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Ok)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                client.payload.name.ifBlank { client.payload.ip },
-                color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                if (rtt < 0) "测量延迟中…" else "$rtt ms",
-                color = when {
-                    rtt < 0 -> TextMuted
-                    rtt < 80 -> Ok
-                    rtt < 200 -> Primary
-                    else -> Danger
-                },
-                fontSize = 12.sp, fontWeight = FontWeight.Medium
-            )
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        BoxWithConstraints(
-            Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0F141A)),
-            contentAlignment = Alignment.Center
-        ) {
-            // 让画面容器精确等于视频宽高比：既不裁切，也不留黑边
-            val boxW = if (maxWidth / maxHeight > aspect) maxHeight * aspect else maxWidth
-            val boxH = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
-
-            Box(
-                Modifier
-                    .size(boxW, boxH)
-                    .clip(RoundedCornerShape(14.dp))
-            ) {
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(vw, vh) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                send("down", down.position.x, down.position.y, size.width, size.height)
-                                while (true) {
-                                    val ev = awaitPointerEvent()
-                                    val ch = ev.changes.firstOrNull() ?: break
-                                    if (ch.pressed) {
-                                        val now = System.currentTimeMillis()
-                                        // 60Hz 采样，保证被控端拿到的轨迹足够细，滑动/惯性才自然
-                                        if (now - lastMoveAt > 16) {
-                                            lastMoveAt = now
-                                            send("move", ch.position.x, ch.position.y, size.width, size.height)
-                                        }
-                                        ch.consume()
-                                    } else {
-                                        send("up", ch.position.x, ch.position.y, size.width, size.height)
-                                        break
-                                    }
-                                }
+            .onGloballyPositioned { rootOrigin = it.positionInRoot() }
+            .pointerInput(vw, vh) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val vr = videoRect
+                    if (vr.width() <= 0 || vr.height() <= 0) return@awaitEachGesture
+                    val dpos = down.position + rootOrigin
+                    // 只处理落在画面纵向范围内的触摸：顶部状态条、底部工具条在画面上下之外，
+                    // 天然不会误触（它们的按钮照常工作）
+                    if (dpos.y < vr.top || dpos.y > vr.bottom) return@awaitEachGesture
+                    // 横向不做限制：画面左右的黑边/内边距也算作画面的最边缘，
+                    // 否则手指从屏幕物理边缘起手时永远够不到被控端的侧边返回区
+                    send("down", dpos.x - vr.left, dpos.y - vr.top, vr.width(), vr.height())
+                    while (true) {
+                        val ev = awaitPointerEvent()
+                        val ch = ev.changes.firstOrNull() ?: break
+                        val p = ch.position + rootOrigin
+                        if (ch.pressed) {
+                            val now = System.currentTimeMillis()
+                            // 60Hz 采样，保证被控端拿到的轨迹足够细，滑动/惯性才自然
+                            if (now - lastMoveAt > 16) {
+                                lastMoveAt = now
+                                send("move", p.x - vr.left, p.y - vr.top, vr.width(), vr.height())
                             }
-                        },
-                    factory = { vctx ->
-                        SurfaceViewRenderer(vctx).also { r ->
-                            r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
-                            client.rtc?.attachRenderer(r)
+                            ch.consume()
+                        } else {
+                            send("up", p.x - vr.left, p.y - vr.top, vr.width(), vr.height())
+                            ch.consume()
+                            break
                         }
-                    },
-                    onRelease = { r ->
-                        client.rtc?.detachRenderer()
-                        runCatching { r.release() }
                     }
-                )
-                if (hasVideo == null) {
-                    Column(
-                        Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
-                        Spacer(Modifier.height(12.dp))
-                        Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
-                    }
-                }
-                // 调试用：显示真实帧分辨率，便于核对画面比例与触控精度
-                if (vw > 0 && vh > 0) {
-                    Text(
-                        "${vw}×${vh}",
-                        color = TextDim,
-                        fontSize = 9.sp,
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(8.dp)
-                    )
                 }
             }
-        }
-
-        Spacer(Modifier.height(14.dp))
-        Row(Modifier.fillMaxWidth()) {
-            ToolChip("返回", Modifier.weight(1f)) { client.sendNav("back") }
-            Spacer(Modifier.width(10.dp))
-            ToolChip("主页", Modifier.weight(1f)) { client.sendNav("home") }
-            Spacer(Modifier.width(10.dp))
-            ToolChip("最近任务", Modifier.weight(1f)) { client.sendNav("recents") }
-        }
-        Spacer(Modifier.height(12.dp))
-        PalmButton(
-            "断开连接",
-            Modifier.fillMaxWidth(),
-            danger = true
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(22.dp)
         ) {
-            client.disconnect()
-            onExit()
+            PalmTopBar("远程控制")
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Surface1)
+                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Ok)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    client.payload.name.ifBlank { client.payload.ip },
+                    color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    if (rtt < 0) "测量延迟中…" else "$rtt ms",
+                    color = when {
+                        rtt < 0 -> TextMuted
+                        rtt < 80 -> Ok
+                        rtt < 200 -> Primary
+                        else -> Danger
+                    },
+                    fontSize = 12.sp, fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF0F141A)),
+                contentAlignment = Alignment.Center
+            ) {
+                // 让画面容器精确等于视频宽高比：既不裁切，也不留黑边
+                val boxW = if (maxWidth / maxHeight > aspect) maxHeight * aspect else maxWidth
+                val boxH = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
+
+                Box(
+                    Modifier
+                        .size(boxW, boxH)
+                        .clip(RoundedCornerShape(14.dp))
+                        .onGloballyPositioned { c ->
+                            val p = c.positionInRoot()
+                            val r = Rect(
+                                p.x.toInt(), p.y.toInt(),
+                                (p.x + c.size.width).toInt(), (p.y + c.size.height).toInt()
+                            )
+                            if (r != videoRect) videoRect = r
+                        }
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { vctx ->
+                            SurfaceViewRenderer(vctx).also { r ->
+                                r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
+                                client.rtc?.attachRenderer(r)
+                            }
+                        },
+                        onRelease = { r ->
+                            client.rtc?.detachRenderer()
+                            runCatching { r.release() }
+                        }
+                    )
+                    if (hasVideo == null) {
+                        Column(
+                            Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
+                            Spacer(Modifier.height(12.dp))
+                            Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
+                        }
+                    }
+                    // 调试用：显示真实帧分辨率，便于核对画面比例与触控精度
+                    if (vw > 0 && vh > 0) {
+                        Text(
+                            "${vw}×${vh}",
+                            color = TextDim,
+                            fontSize = 9.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth()) {
+                ToolChip("返回", Modifier.weight(1f)) { client.sendNav("back") }
+                Spacer(Modifier.width(10.dp))
+                ToolChip("主页", Modifier.weight(1f)) { client.sendNav("home") }
+                Spacer(Modifier.width(10.dp))
+                ToolChip("最近任务", Modifier.weight(1f)) { client.sendNav("recents") }
+            }
+            Spacer(Modifier.height(12.dp))
+            PalmButton(
+                "断开连接",
+                Modifier.fillMaxWidth(),
+                danger = true
+            ) {
+                client.disconnect()
+                onExit()
+            }
         }
     }
 }

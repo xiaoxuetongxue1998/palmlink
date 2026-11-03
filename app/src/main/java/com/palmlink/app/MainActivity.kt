@@ -197,7 +197,7 @@ private fun RoleScreen(onHost: () -> Unit, onCtrl: () -> Unit) {
             Spacer(Modifier.height(12.dp))
         }
         Text(
-            "v0.3.4 · 局域网投屏 + 手势控制\n被控端请在系统设置中开启掌驭的无障碍服务",
+            "v0.3.5 · 局域网投屏 + 手势控制\n被控端请在系统设置中开启掌驭的无障碍服务",
             color = TextDim,
             fontSize = 11.sp,
             lineHeight = 17.sp,

@@ -98,14 +98,28 @@ class PalmAccessibilityService : AccessibilityService() {
         val dyPx = (end[1] - first[1]) * h
         val dist = kotlin.math.hypot(dxPx, dyPx)
 
+        // 侧边滑动返回：起点贴着左/右屏幕边缘，且明显是「向内水平划」。
+        // 这种手势如果照原样注入，很容易被系统的手势导航边缘区吞掉（或被 vivo 的
+        // 智能侧边栏抢走），对方屏幕可能毫无反应。直接执行系统返回则 100% 命中，
+        // 效果跟真机侧滑返回完全一致。
+        if (isEdgeBack(first[0], dxPx, dyPx, w)) {
+            pts.clear()
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return
+        }
+
+        // 坐标必须落在屏幕内：手势越界时 dispatchGesture 会直接失败
+        fun fx(v: Double): Float = (v * w).toFloat().coerceIn(0f, (w - 1).toFloat())
+        fun fy(v: Double): Float = (v * h).toFloat().coerceIn(0f, (h - 1).toFloat())
+
         val path = Path()
-        path.moveTo((first[0] * w).toFloat(), (first[1] * h).toFloat())
+        path.moveTo(fx(first[0]), fy(first[1]))
         if (pts.size == 1) {
             // 路径只有 moveTo 时 StrokeDescription 会认为无效，补一个极小位移
-            path.lineTo((first[0] * w).toFloat() + 1f, (first[1] * h).toFloat() + 1f)
+            path.lineTo(fx(first[0]) + 1f, fy(first[1]) + 1f)
         } else {
             for (i in 1 until pts.size) {
-                path.lineTo((pts[i][0] * w).toFloat(), (pts[i][1] * h).toFloat())
+                path.lineTo(fx(pts[i][0]), fy(pts[i][1]))
             }
         }
 
@@ -120,6 +134,18 @@ class PalmAccessibilityService : AccessibilityService() {
         }
         dispatchPath(path, duration)
         pts.clear()
+    }
+
+    /** 是否是「从屏幕左/右边缘向内水平划」的返回手势 */
+    private fun isEdgeBack(startXn: Double, dxPx: Double, dyPx: Double, w: Int): Boolean {
+        val travel = kotlin.math.abs(dxPx)
+        if (travel < w * 0.04f) return false            // 位移太小，更像点击
+        if (travel < kotlin.math.abs(dyPx) * 1.5f) return false  // 竖向为主，不是返回
+        return when {
+            startXn <= 0.06 -> dxPx > 0                 // 左边缘往右划
+            startXn >= 0.94 -> dxPx < 0                 // 右边缘往左划
+            else -> false
+        }
     }
 
     private fun dispatchPath(path: Path, durationMs: Long) {
