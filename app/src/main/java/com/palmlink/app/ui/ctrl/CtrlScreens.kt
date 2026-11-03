@@ -47,10 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -402,12 +400,6 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
 
     var lastMoveAt by remember { mutableStateOf(0L) }
 
-    // 画面在整屏坐标系里的矩形。触控层铺满整个窗口再按这个矩形换算，
-    // 手指从屏幕物理边缘（画面外的黑边/内边距）按下也能映射到 x=0 / x=1，
-    // 否则永远够不到被控端的侧边返回区域。
-    var rootOrigin by remember { mutableStateOf(Offset.Zero) }
-    var videoRect by remember { mutableStateOf(Rect(0, 0, 0, 0)) }
-
     // 控制端自己也开着手势导航：不加排除区，从屏幕左/右边缘起手的滑动会被本机
     // 系统当成「返回」吞掉，画面里根本收不到事件。
     val hostView = LocalView.current
@@ -438,57 +430,16 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
         }
     }
 
-    /** 视图与画面宽高比完全一致，所以直接按视图尺寸归一化即可，没有黑边补偿误差 */
-    fun send(action: String, px: Float, py: Float, w: Int, h: Int) {
-        if (w <= 0 || h <= 0) return
-        client.sendTouch(
-            action,
-            (px / w).coerceIn(0f, 1f).toDouble(),
-            (py / h).coerceIn(0f, 1f).toDouble()
-        )
+    /** 归一化坐标下发（0..1），被控端按自己的屏幕尺寸换算 */
+    fun send(action: String, xn: Double, yn: Double) {
+        client.sendTouch(action, xn.coerceIn(0.0, 1.0), yn.coerceIn(0.0, 1.0))
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { rootOrigin = it.positionInRoot() }
-            .pointerInput(vw, vh) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val vr = videoRect
-                    if (vr.width() <= 0 || vr.height() <= 0) return@awaitEachGesture
-                    val dpos = down.position + rootOrigin
-                    // 只处理落在画面纵向范围内的触摸：顶部状态条、底部工具条在画面上下之外，
-                    // 天然不会误触（它们的按钮照常工作）
-                    if (dpos.y < vr.top || dpos.y > vr.bottom) return@awaitEachGesture
-                    // 横向不做限制：画面左右的黑边/内边距也算作画面的最边缘，
-                    // 否则手指从屏幕物理边缘起手时永远够不到被控端的侧边返回区
-                    send("down", dpos.x - vr.left, dpos.y - vr.top, vr.width(), vr.height())
-                    while (true) {
-                        val ev = awaitPointerEvent()
-                        val ch = ev.changes.firstOrNull() ?: break
-                        val p = ch.position + rootOrigin
-                        if (ch.pressed) {
-                            val now = System.currentTimeMillis()
-                            // 60Hz 采样，保证被控端拿到的轨迹足够细，滑动/惯性才自然
-                            if (now - lastMoveAt > 16) {
-                                lastMoveAt = now
-                                send("move", p.x - vr.left, p.y - vr.top, vr.width(), vr.height())
-                            }
-                            ch.consume()
-                        } else {
-                            send("up", p.x - vr.left, p.y - vr.top, vr.width(), vr.height())
-                            ch.consume()
-                            break
-                        }
-                    }
-                }
-            }
-    ) {
+    Column(Modifier.fillMaxSize()) {
         Column(
             Modifier
-                .fillMaxSize()
-                .padding(22.dp)
+                .fillMaxWidth()
+                .padding(start = 22.dp, end = 22.dp, top = 22.dp)
         ) {
             PalmTopBar("远程控制")
             Row(
@@ -522,73 +473,104 @@ fun RemoteScreen(client: ControllerClient, onExit: () -> Unit) {
                     fontSize = 12.sp, fontWeight = FontWeight.Medium
                 )
             }
+        }
 
-            Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(14.dp))
 
-            BoxWithConstraints(
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF0F141A)),
-                contentAlignment = Alignment.Center
-            ) {
-                // 让画面容器精确等于视频宽高比：既不裁切，也不留黑边
-                val boxW = if (maxWidth / maxHeight > aspect) maxHeight * aspect else maxWidth
-                val boxH = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
-
-                Box(
-                    Modifier
-                        .size(boxW, boxH)
-                        .clip(RoundedCornerShape(14.dp))
-                        .onGloballyPositioned { c ->
-                            val p = c.positionInRoot()
-                            val r = Rect(
-                                p.x.toInt(), p.y.toInt(),
-                                (p.x + c.size.width).toInt(), (p.y + c.size.height).toInt()
-                            )
-                            if (r != videoRect) videoRect = r
-                        }
-                ) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { vctx ->
-                            SurfaceViewRenderer(vctx).also { r ->
-                                r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
-                                client.rtc?.attachRenderer(r)
+        // 画面区左右不留内边距：画面（以及画面两侧的黑边）一直铺到屏幕物理边缘。
+        // 手指从屏幕边缘起手时才会被捕捉到，被控端的侧边滑动返回也才玩得出来。
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color(0xFF0F141A))
+                .pointerInput(vw, vh) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val areaW = size.width.toFloat()
+                        val areaH = size.height.toFloat()
+                        if (areaW <= 0f || areaH <= 0f || aspect <= 0f) return@awaitEachGesture
+                        // 画面按真实宽高比居中，先算黑边偏移，再归一化：
+                        // 落在黑边（甚至屏幕边缘外）的触摸会被 clamp 到 0 / 1，
+                        // 正好对应被控端屏幕的最边缘
+                        val fitW = if (areaW / areaH > aspect) areaH * aspect else areaW
+                        val fitH = if (areaW / areaH > aspect) areaH else areaW / aspect
+                        val offX = (areaW - fitW) / 2f
+                        val offY = (areaH - fitH) / 2f
+                        fun nx(x: Float) = ((x - offX) / fitW).toDouble().coerceIn(0.0, 1.0)
+                        fun ny(y: Float) = ((y - offY) / fitH).toDouble().coerceIn(0.0, 1.0)
+                        send("down", nx(down.position.x), ny(down.position.y))
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val ch = ev.changes.firstOrNull() ?: break
+                            if (ch.pressed) {
+                                val now = System.currentTimeMillis()
+                                // 60Hz 采样，保证被控端拿到的轨迹足够细，滑动/惯性才自然
+                                if (now - lastMoveAt > 16) {
+                                    lastMoveAt = now
+                                    send("move", nx(ch.position.x), ny(ch.position.y))
+                                }
+                                ch.consume()
+                            } else {
+                                send("up", nx(ch.position.x), ny(ch.position.y))
+                                ch.consume()
+                                break
                             }
-                        },
-                        onRelease = { r ->
-                            client.rtc?.detachRenderer()
-                            runCatching { r.release() }
-                        }
-                    )
-                    if (hasVideo == null) {
-                        Column(
-                            Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
-                            Spacer(Modifier.height(12.dp))
-                            Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
                         }
                     }
-                    // 调试用：显示真实帧分辨率，便于核对画面比例与触控精度
-                    if (vw > 0 && vh > 0) {
-                        Text(
-                            "${vw}×${vh}",
-                            color = TextDim,
-                            fontSize = 9.sp,
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(8.dp)
-                        )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            // 让画面容器精确等于视频宽高比：既不裁切，也不留黑边
+            val boxW = if (maxWidth / maxHeight > aspect) maxHeight * aspect else maxWidth
+            val boxH = if (maxWidth / maxHeight > aspect) maxHeight else maxWidth / aspect
+
+            Box(Modifier.size(boxW, boxH)) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { vctx ->
+                        SurfaceViewRenderer(vctx).also { r ->
+                            r.init(WebRtcCtrl.eglBase.eglBaseContext, null)
+                            client.rtc?.attachRenderer(r)
+                        }
+                    },
+                    onRelease = { r ->
+                        client.rtc?.detachRenderer()
+                        runCatching { r.release() }
+                    }
+                )
+                if (hasVideo == null) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = Primary, strokeWidth = 3.dp)
+                        Spacer(Modifier.height(12.dp))
+                        Text("等待对方画面…", color = TextMuted, fontSize = 12.sp)
                     }
                 }
+                // 调试用：显示真实帧分辨率，便于核对画面比例与触控精度
+                if (vw > 0 && vh > 0) {
+                    Text(
+                        "${vw}×${vh}",
+                        color = TextDim,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp)
+                    )
+                }
             }
+        }
 
-            Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(14.dp))
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 22.dp, end = 22.dp, bottom = 22.dp)
+        ) {
             Row(Modifier.fillMaxWidth()) {
                 ToolChip("返回", Modifier.weight(1f)) { client.sendNav("back") }
                 Spacer(Modifier.width(10.dp))
